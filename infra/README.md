@@ -44,20 +44,15 @@ Bootstrap cấu hình versioning, SSE-S3 encryption, public-access block, TLS-on
 
 ## Bước 2: kết nối shared sandbox state (mọi thành viên, một lần mỗi máy)
 
-Chạy nguyên khối lệnh sau từ repository clone. Không cần tạo hoặc commit `backend.hcl`.
+Backend S3 đã được versioned trong Terraform với đúng shared bucket, key, region và S3 lockfile. Chạy nguyên khối lệnh sau từ repository clone:
 
 ```bash
-terraform -chdir=infra/environments/sandbox init \
-  -backend-config='bucket=cdo08-tf-state-894597652722' \
-  -backend-config='key=cdo08/sandbox/terraform.tfstate' \
-  -backend-config='region=ap-southeast-2' \
-  -backend-config='encrypt=true' \
-  -backend-config='use_lockfile=true'
+terraform -chdir=infra/environments/sandbox init -reconfigure
 terraform -chdir=infra/environments/sandbox validate
 terraform -chdir=infra/environments/sandbox plan
 ```
 
-Tất cả member phải dùng chính xác bucket, key và region trên. Chỉ chạy `apply` sau khi team review plan. Nếu state đang bị lock, chờ thao tác đang chạy hoàn tất. Chỉ dùng `terraform force-unlock LOCK_ID` khi đã xác nhận không còn process Terraform nào đang dùng state đó.
+`-reconfigure` bảo đảm cấu hình backend cục bộ được cập nhật sau khi pull thay đổi này. Chỉ chạy `apply` sau khi team review plan. Nếu state đang bị lock, chờ thao tác đang chạy hoàn tất. Chỉ dùng `terraform force-unlock LOCK_ID` khi đã xác nhận không còn process Terraform nào đang dùng state đó.
 
 ## Bước 3: vòng lặp thiết kế hạ tầng
 
