@@ -47,27 +47,27 @@ Bootstrap cấu hình versioning, SSE-S3 encryption, public-access block, TLS-on
 Backend S3 đã được versioned trong Terraform với đúng shared bucket, key, region và S3 lockfile. Chạy nguyên khối lệnh sau từ repository clone:
 
 ```bash
-terraform -chdir=infra/environments/sandbox init -reconfigure
-terraform -chdir=infra/environments/sandbox validate
-terraform -chdir=infra/environments/sandbox plan
+make tf-init
+make tf-validate
+make tf-plan
 ```
 
-`-reconfigure` bảo đảm cấu hình backend cục bộ được cập nhật sau khi pull thay đổi này. Chỉ chạy `apply` sau khi team review plan. Nếu state đang bị lock, chờ thao tác đang chạy hoàn tất. Chỉ dùng `terraform force-unlock LOCK_ID` khi đã xác nhận không còn process Terraform nào đang dùng state đó.
+Các lệnh Terraform của team được gom trong [`Makefile`](../Makefile). Chạy `make` để xem danh sách lệnh. Chỉ chạy `make tf-apply` sau khi team review plan. Nếu state đang bị lock, chờ thao tác đang chạy hoàn tất. Chỉ dùng `terraform force-unlock LOCK_ID` khi đã xác nhận không còn process Terraform nào đang dùng state đó.
 
 ## Bước 3: vòng lặp thiết kế hạ tầng
 
 Sau khi thêm hoặc sửa module/resource, chạy các lệnh sau trước khi gửi review:
 
 ```bash
-terraform -chdir=infra/environments/sandbox fmt -check -recursive
-terraform -chdir=infra/environments/sandbox validate
-terraform -chdir=infra/environments/sandbox plan
+make tf-fmt
+make tf-validate
+make tf-plan
 ```
 
 Sau khi plan được team review:
 
 ```bash
-terraform -chdir=infra/environments/sandbox apply
+make tf-apply
 ```
 
 ## Quy ước làm việc
@@ -79,7 +79,6 @@ terraform -chdir=infra/environments/sandbox apply
 - IAM role/user chạy Terraform phải có quyền đọc/ghi state object và đọc/ghi/xóa object `.tflock`.
 
 ```bash
-terraform -chdir=infra/environments/sandbox fmt -check -recursive
-terraform -chdir=infra/environments/sandbox validate
-terraform -chdir=infra/environments/sandbox plan
+make tf-check
+make tf-plan
 ```
