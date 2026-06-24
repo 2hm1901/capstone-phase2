@@ -30,6 +30,8 @@ terraform version
 
 ## Bước 1: tạo shared state bucket (chỉ một người thực hiện một lần)
 
+> **Trạng thái: đã hoàn thành ngày 24-06-2026.** Không thành viên nào chạy lại các lệnh trong bước này, đặc biệt là `terraform apply` trong `infra/bootstrap`.
+
 Người được team phân công chạy đúng các lệnh này một lần. Các thành viên khác không chạy `apply` trong `infra/bootstrap` sau khi bucket đã tồn tại.
 
 ```bash
