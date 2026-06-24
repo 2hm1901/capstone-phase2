@@ -1,7 +1,0 @@
-# Copy to backend.hcl and replace the placeholders after applying ../bootstrap.
-# backend.hcl is intentionally ignored: it is machine/environment-specific.
-bucket       = "REPLACE_WITH_GLOBALLY_UNIQUE_STATE_BUCKET"
-key          = "cdo08/sandbox/terraform.tfstate"
-region       = "REPLACE_WITH_AWS_REGION"
-encrypt      = true
-use_lockfile = true
