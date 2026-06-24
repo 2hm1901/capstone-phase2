@@ -1,0 +1,17 @@
+.env
+.env.*
+.DS_Store
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terraform/
+terraform.tfstate.d/
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+build/
+*.pem
+*.key
+*.log
