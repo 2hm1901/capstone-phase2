@@ -1,8 +1,8 @@
 # Terraform – CDO08
 
-CDO08 có đúng **một môi trường deployable**: `sandbox`, chạy chung trong AWS account `894597652722` tại region `ap-southeast-2`. Không tạo `prod`, `staging`, Terraform workspace hay state key khác cho project này.
+CDO08 có đúng **một môi trường deployable**: `sandbox`, chạy chung trong AWS account `894597652722` tại region `us-west-2`. Không tạo `prod`, `staging`, Terraform workspace hay state key khác cho project này.
 
-Mỗi thành viên dùng IAM user AWS riêng, nhưng tất cả cùng đọc/ghi **một** remote state trong bucket `cdo08-tf-state-894597652722` tại key `cdo08/sandbox/terraform.tfstate`. S3 native locking được bật bằng `use_lockfile = true`; Terraform tự tạo và xóa object `cdo08/sandbox/terraform.tfstate.tflock` trong lúc `plan`, `apply` hoặc thao tác có thể ghi state. Không tạo DynamoDB lock table: cơ chế locking đó đã deprecated.
+Mỗi thành viên dùng IAM user AWS riêng, nhưng tất cả cùng đọc/ghi **một** remote state trong bucket `cdo08-tf-state-894597652722-us-west-2` tại key `cdo08/sandbox/terraform.tfstate`. S3 native locking được bật bằng `use_lockfile = true`; Terraform tự tạo và xóa object `cdo08/sandbox/terraform.tfstate.tflock` trong lúc `plan`, `apply` hoặc thao tác có thể ghi state. Không tạo DynamoDB lock table: cơ chế locking đó đã deprecated.
 
 ## Cấu trúc
 
@@ -20,7 +20,7 @@ infra/
 
 Yêu cầu: AWS CLI đã cấu hình user IAM riêng của bạn và Terraform `>= 1.10.0`.
 
-Chạy lệnh sau. Kết quả phải là account `894597652722` và region `ap-southeast-2`; nếu khác, dừng lại và sửa AWS profile trước khi tiếp tục.
+Chạy lệnh sau. Kết quả phải là account `894597652722` và region `us-west-2`; nếu khác, dừng lại và sửa AWS profile trước khi tiếp tục.
 
 ```bash
 aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output table
@@ -30,9 +30,9 @@ terraform version
 
 ## Bước 1: tạo shared state bucket (chỉ một người thực hiện một lần)
 
-> **Trạng thái: đã hoàn thành ngày 24-06-2026.** Không thành viên nào chạy lại các lệnh trong bước này, đặc biệt là `terraform apply` trong `infra/bootstrap`.
+> Chỉ một người trong team chạy bước này để tạo bucket state tại `us-west-2`. Sau khi bucket đã tồn tại, các thành viên khác không chạy lại `terraform apply` trong `infra/bootstrap`.
 
-Người được team phân công chạy đúng các lệnh này một lần. Các thành viên khác không chạy `apply` trong `infra/bootstrap` sau khi bucket đã tồn tại.
+Người được team phân công chạy đúng các lệnh này một lần:
 
 ```bash
 terraform -chdir=infra/bootstrap init
