@@ -88,28 +88,6 @@ resource "aws_route_table_association" "ai_engine_private" {
   route_table_id = aws_route_table.ai_engine_private.id
 }
 
-resource "aws_vpc_peering_connection" "workload_to_ai_engine" {
-  vpc_id      = aws_vpc.workload.id
-  peer_vpc_id = aws_vpc.ai_engine.id
-  auto_accept = true
-
-  tags = merge(var.tags, {
-    Name = "${var.name_prefix}-workload-ai-engine-peering"
-  })
-}
-
-resource "aws_route" "workload_to_ai_engine" {
-  route_table_id            = aws_route_table.workload_private.id
-  destination_cidr_block    = aws_vpc.ai_engine.cidr_block
-  vpc_peering_connection_id = aws_vpc_peering_connection.workload_to_ai_engine.id
-}
-
-resource "aws_route" "ai_engine_to_workload" {
-  route_table_id            = aws_route_table.ai_engine_private.id
-  destination_cidr_block    = aws_vpc.workload.cidr_block
-  vpc_peering_connection_id = aws_vpc_peering_connection.workload_to_ai_engine.id
-}
-
 resource "aws_vpc_endpoint" "ai_engine_s3" {
   vpc_id            = aws_vpc.ai_engine.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
@@ -170,12 +148,12 @@ resource "aws_security_group" "ai_engine_task" {
 
 resource "aws_security_group_rule" "ai_engine_alb_ingress_from_workload" {
   type              = "ingress"
-  description       = "Allow HTTPS from the workload VPC over private routing."
+  description       = "Allow HTTPS from platform integration components."
   security_group_id = aws_security_group.ai_engine_alb.id
   from_port         = 443
   to_port           = 443
   protocol          = "tcp"
-  cidr_blocks       = [aws_vpc.workload.cidr_block]
+  cidr_blocks       = [var.ai_engine_vpc_cidr]
 }
 
 resource "aws_security_group_rule" "ai_engine_alb_egress_to_task" {
