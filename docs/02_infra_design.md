@@ -9,6 +9,7 @@
 ## 1. Tổng quan kiến trúc
 
 > **Sơ đồ kiến trúc:** CDO08 sẽ tự bổ sung Mermaid hoặc ảnh kiến trúc sau khi chốt account, region và endpoint cuối cùng của AI Engine. Sơ đồ cần thể hiện luồng: synthetic generator → ingest → buffer → time-series storage → prediction adapter → **AI Engine Runtime do CDO08 host** → Grafana annotation/audit/fallback.
+
 ![alt text](image.png)
 
 CDO08 thiết kế platform theo nguyên tắc **operational trust**: telemetry phải được kiểm tra trước khi lưu; lỗi tạm thời không được làm mất event âm thầm; kết quả prediction phải truy vết được; và khi AI serving lỗi, alert vẫn hoạt động theo static threshold. Đây là cách giải trực tiếp vấn đề của Client: nội bộ không được phát hiện capacity exhaustion sau support ticket.
@@ -17,8 +18,6 @@ Luồng dữ liệu dự kiến gồm sáu bước.
 Đầu tiên, một ECS Fargate task chạy synthetic generator/k6 để tạo metric cho ba service và bốn scenario test. Tiếp theo, API Gateway và Lambda ingest xác thực schema, `tenant_id`, `service_id`, `metric_type`, `ts` và value. Event hợp lệ vào SQS; event sai schema vào DLQ để điều tra. Writer Lambda lấy event theo batch từ SQS, chuyển JSON telemetry thành Prometheus remote-write payload rồi ghi vào Amazon Managed Service for Prometheus (AMP). EventBridge Scheduler chạy theo lịch, gửi payload `tenant_id`, `service_id` và metric lookback window tới Prediction Integration Lambda. Lambda query metric window tối thiểu 120 phút bằng PromQL theo service, chuyển dữ liệu thành `signal_window`, sau đó gọi `POST /v1/predict` tới **AI Engine Runtime do CDO08 host** bằng IAM SigV4. AI team bàn giao engine artifact/spec; CDO08 triển khai runtime theo Deployment Contract, kiểm soát network, IAM, secrets, scaling, health check, rollout/rollback và observability trong platform CDO08. Nếu thành công, Lambda tạo Grafana annotation và audit record; nếu AI trả 429/503, timeout hoặc hết retry budget, fallback evaluator query metric gần nhất từ AMP, dùng static threshold và tạo alert/annotation có nhãn `fallback`.
 
 > **Trạng thái quyết định AI Engine:** Deployment Contract đã freeze lại theo đúng ownership: **mỗi CDO tự host AI Engine trên platform của mình** dựa trên artifact/spec AI bàn giao. CDO08 dùng ECS Fargate FastAPI runtime theo các thông số compute/network trong contract.
-
-Amazon Timestream for LiveAnalytics đã bị loại khỏi CDO08 vì AWS account capstone không có quyền truy cập khách hàng mới; evidence là thông báo trong AWS Console ngày 23/06/2026. AMP là primary telemetry store mới. Quyết định này cần **POC (Proof of Concept, tức thử nghiệm nhỏ để chứng minh kỹ thuật chạy được)** về remote-write, PromQL query, Grafana datasource và cost estimate trước khi base infrastructure được freeze.
 
 CDO08 không chọn một “angle công nghệ” chỉ để khác hai CDO còn lại. Nhóm có thể dùng managed service giống họ, nhưng cần chứng minh platform đáng tin hơn bằng test và artifact: validation/retry/DLQ, correlation ID xuyên suốt, audit mã hóa, fallback test thật, IaC tái lập và cost guard.
 
