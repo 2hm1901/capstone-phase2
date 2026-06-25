@@ -150,19 +150,19 @@ Giải pháp này được lựa chọn vì ba lý do chính:
 
 ## 7. Security considerations
 
-| Security area            | Decision / requirement                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| IAM least privilege      | Generator sử dụng IAM Task Role và chỉ được cấp quyền tối thiểu để gọi API Gateway ingest endpoint (`execute-api:Invoke`) |
-| Network exposure         | ECS Fargate task chạy trong private subnet, không gán Public IP và không có public inbound                                |
-| Container image security | Container image được lưu trong private Amazon ECR và chỉ deploy image đã được scan                                        |
-| Image integrity          | Bật Image Tag Immutability và ưu tiên deploy bằng image digest (`sha256`) để tránh deploy nhầm image                      |
-| Secrets                  | Không sử dụng static AWS credential; sử dụng AWS Secrets Manager hoặc ECS Secret Injection nếu cần                        |
-| Encryption at rest       | Private ECR repository và CloudWatch Logs được mã hóa mặc định                                                            |
-| Encryption in transit    | Telemetry được gửi tới API Gateway thông qua HTTPS                                                                        |
-| Container hardening      | Container chạy bằng non-root user và thiết lập CPU/Memory limits để giảm blast radius                                     |
-| PII/log redaction        | Không emit PII và không ghi log chứa secret hoặc authentication header                                                    |
-| Tenant isolation         | Payload và header phải chứa `tenant_id` đúng theo cấu hình demo                                                           |
-
+| Security area | Decision / requirement |
+|---|---|
+| IAM least privilege | Generator sử dụng IAM Task Role và chỉ được cấp quyền tối thiểu để gọi API Gateway ingest endpoint (`execute-api:Invoke`) |
+| Network exposure | ECS Fargate task chạy trong private subnet, không gán Public IP và không có public inbound |
+| Container image security | Container image được lưu trong private Amazon ECR và chỉ deploy các image đã được scan |
+| Image integrity | Bật Image Tag Immutability và ưu tiên deploy bằng image digest (`sha256`) để tránh deploy nhầm hoặc deploy image bị thay đổi ngoài ý muốn |
+| Secrets | Không sử dụng static AWS credential; sử dụng AWS Secrets Manager kết hợp ECS Secret Injection nếu cần secret runtime |
+| Encryption at rest | Container image trong private ECR và CloudWatch Logs được mã hóa mặc định bởi AWS |
+| Encryption in transit | Telemetry được gửi tới API Gateway thông qua HTTPS |
+| PII/log redaction | Không emit dữ liệu PII và không ghi log chứa secret hoặc authentication header |
+| Tenant isolation | Payload và header phải chứa `tenant_id` đúng theo cấu hình demo |
+| Container hardening | Container chạy bằng non-root user để giảm nguy cơ privilege escalation |
+| Resource limits | Thiết lập CPU và memory limits trong ECS Task Definition để tránh resource exhaustion và giảm blast radius |
 ### Negative test đề xuất
 
 * [x] Generator không thể ghi trực tiếp vào AMP hoặc datastore.
