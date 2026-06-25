@@ -3,7 +3,7 @@
 **Document owner:** CDO08
 
 **Status:** Draft (W11)
-**Last updated:** 2026-06-22
+**Last updated:** 2026-06-25
 
 ## 1. Đề tài context
 
@@ -11,7 +11,7 @@ Client là Head of SRE tại một fintech vận hành khoảng 120 microservice
 
 Foresight Lens là hệ thống dự báo chủ động: nhận telemetry hạ tầng liên tục, học baseline riêng từng service, dự đoán drift/capacity exhaustion và đưa capacity recommendation cụ thể để con người duyệt. Sản phẩm chỉ **predict + recommend**, không auto-remediation. Các phần ngoài phạm vi là cross-service root cause analysis, cost forecasting, auto-retrain pipeline, multi-region deployment thực tế, production traffic mirror, custom business metric, LLM prediction và UI dashboard mới.
 
-CDO08 chịu trách nhiệm platform: tạo/ingest telemetry cho ba service demo, lưu và query time-series, tích hợp endpoint `POST /v1/predict` của AI, hiển thị kết quả trên Grafana bằng annotation, tạo audit log mã hóa và duy trì static-threshold fail-open khi AI serving down. AI team sở hữu baseline, prediction, confidence và capacity recommendation. Telemetry, AI API và Deployment contracts là interface bắt buộc, freeze vào T5 W11.
+CDO08 chịu trách nhiệm platform: tạo/ingest telemetry cho ba service demo, lưu và query time-series, **host AI Engine Runtime trên platform CDO08 theo artifact/spec AI bàn giao**, gọi endpoint `POST /v1/predict`, hiển thị kết quả trên Grafana bằng annotation, tạo audit log mã hóa và duy trì static-threshold fail-open khi AI serving down. AI team sở hữu thuật toán/baseline logic, prediction, confidence và capacity recommendation; CDO08 sở hữu runtime hosting, IAM, network, scaling, rollout/rollback và observability theo Deployment Contract. Telemetry, AI API và Deployment contracts là interface bắt buộc, freeze vào T5 W11.
 
 ## 2. Infra non-functional requirements
 
@@ -48,7 +48,7 @@ Trade-off được chấp nhận là không chạy theo các feature ngoài scop
 
 CDO08 sẽ demo ba service synthetic, cần Client xác nhận cuối: `payment-api` (CPU, latency, RDS connection pressure), `queue-worker` (queue depth, consumer lag, worker CPU), và `gateway-api` (RPS, ALB active connections, latency/error rate). Generator tạo normal baseline và bốn test profiles bắt buộc: gradual drift, sudden spike, slow leak, noisy baseline. Mỗi scenario phải tái lập được và có ground truth để AI team tính confusion matrix.
 
-Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-series storage → query window cho AI endpoint → prediction/recommendation → Grafana annotation và encrypted audit log. CDO08 có thể dùng mock endpoint đúng contract shape trong W11; W12 T3 phải gọi AI endpoint thật. Static threshold evaluation là nhánh độc lập chỉ hoạt động khi AI call thất bại, không thay thế model trong normal path.
+Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-series storage → query window → Prediction Lambda → AI Engine Runtime do CDO08 host → prediction/recommendation → Grafana annotation và encrypted audit log. CDO08 có thể dùng mock endpoint đúng contract shape trong W11; W12 T3 phải deploy artifact AI thật lên ECS Fargate của CDO08 và gọi endpoint thật. Static threshold evaluation là nhánh độc lập chỉ hoạt động khi AI call thất bại, không thay thế model trong normal path.
 
 ## 5. Constraints
 
@@ -63,7 +63,7 @@ Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-se
 - [ ] Ba tier-1 service và metric priority cuối cùng? — *Client, EOD T2 W11.*
 - [ ] `tenant_id` là customer/account isolation hay logical service isolation? — *Client + AI, trước contract freeze.*
 - [ ] Telemetry granularity, demo volume, late-event/order semantics? — *Telemetry Contract, EOD T4 W11.*
-- [ ] AI request window, auth, timeout/retry và error mapping? — *AI API Contract, EOD T4 W11.*
+- [x] AI request window, auth, timeout/retry và error mapping? — *AI API Contract v1.0: window ≥120 phút, IAM SigV4, 400/401/429/503 mapping.*
 - [ ] Audit retention, alert routing, evidence-link format? — *Client/AI, trước T5 W11.*
 - [ ] Static thresholds cho mỗi metric và fallback alert receiver? — *Client/AI, trước W12 integration.*
 - [ ] AWS account, VPC và existing Grafana constraints? — *Mentor/Client, trước Terraform apply.*
