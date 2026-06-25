@@ -42,12 +42,15 @@ State khuyến nghị:
 | Item | Quyết định CDO08 | Lý do |
 |---|---|---|
 | IaC tool | Terraform | Plan/apply rõ ràng, reviewer dễ đọc diff |
-| State backend | S3 remote state + native S3 lockfile `use_lockfile=true` | Tránh state local thất lạc và concurrent apply; không dùng DynamoDB lock |
+| State backend | S3 remote state | Tránh state local thất lạc khi nhiều member cùng làm |
+| State locking | Native S3 lockfile `use_lockfile=true` | Chống concurrent apply bằng file `.tflock` trên S3; **không dùng DynamoDB lock table** |
 | Environment | Chỉ một môi trường shared `sandbox` | Cả nhóm dùng chung một AWS account/region như môi trường dev |
 | Naming | prefix `cdo08-*` | Tránh đụng resource team khác |
 | Tagging | `Project=TF4`, `Team=CDO08`, `Env=sandbox`, `Owner=<name>` | Cost tracking và cleanup |
 
 Remote state đã được bootstrap một lần trong AWS account shared. Không chạy lại bootstrap trừ khi Tech Lead chủ động thay đổi state backend.
+
+Lưu ý: các phần dưới có nhắc **DynamoDB audit table** là nơi lưu prediction/fallback audit records. DynamoDB này không liên quan đến Terraform state locking.
 
 ### 2.2 Terraform module structure
 
