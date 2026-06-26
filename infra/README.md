@@ -46,7 +46,9 @@ Bootstrap cấu hình versioning, SSE-S3 encryption, public-access block, TLS-on
 
 ## Bước 2: kết nối shared sandbox state (mọi thành viên, một lần mỗi máy)
 
-Backend S3 đã được versioned trong Terraform với đúng shared bucket, key, region và S3 lockfile. Chạy nguyên khối lệnh sau từ repository clone:
+Backend S3 đã được versioned trong Terraform với đúng shared bucket, key, region và S3 lockfile.
+
+Nếu máy có `make`:
 
 ```bash
 make tf-init
@@ -54,16 +56,34 @@ make tf-validate
 make tf-plan
 ```
 
-Các lệnh Terraform của team được gom trong [`Makefile`](../Makefile). Chạy `make` để xem danh sách lệnh. Chỉ chạy `make tf-apply` sau khi team review plan. Nếu state đang bị lock, chờ thao tác đang chạy hoàn tất. Chỉ dùng `terraform force-unlock LOCK_ID` khi đã xác nhận không còn process Terraform nào đang dùng state đó.
+Nếu dùng Windows/PowerShell hoặc máy không có `make`, copy lệnh thô này:
+
+```bash
+terraform -chdir=infra/environments/sandbox init
+terraform -chdir=infra/environments/sandbox validate
+terraform -chdir=infra/environments/sandbox plan
+```
+
+Các lệnh Terraform của team được gom trong [`Makefile`](../Makefile). Chạy `make` để xem danh sách lệnh nếu máy hỗ trợ. Chỉ apply sau khi team review plan. Nếu state đang bị lock, chờ thao tác đang chạy hoàn tất. Chỉ dùng `terraform force-unlock LOCK_ID` khi đã xác nhận không còn process Terraform nào đang dùng state đó.
 
 ## Bước 3: vòng lặp thiết kế hạ tầng
 
-Sau khi thêm hoặc sửa module/resource, chạy các lệnh sau trước khi gửi review:
+Sau khi thêm hoặc sửa module/resource, chạy các lệnh sau trước khi gửi review.
+
+Nếu máy có `make`:
 
 ```bash
 make tf-fmt
 make tf-validate
 make tf-plan
+```
+
+Nếu dùng Windows/PowerShell hoặc máy không có `make`, copy lệnh thô này:
+
+```bash
+terraform -chdir=infra/environments/sandbox fmt -recursive
+terraform -chdir=infra/environments/sandbox validate
+terraform -chdir=infra/environments/sandbox plan
 ```
 
 Sau khi plan được team review:
@@ -72,7 +92,13 @@ Sau khi plan được team review:
 make tf-apply
 ```
 
-Không chạy `make tf-apply` từ feature branch khi chưa có review plan. Nếu task phụ thuộc resource của người khác chưa merge, dùng `terraform output`, data source hoặc biến input rõ ràng sau khi PR phụ thuộc đã merge; không tạo lại resource thuộc owner khác.
+Hoặc lệnh thô tương đương:
+
+```bash
+terraform -chdir=infra/environments/sandbox apply
+```
+
+Không chạy `make tf-apply` hoặc `terraform apply` từ feature branch khi chưa có review plan. Nếu task phụ thuộc resource của người khác chưa merge, dùng `terraform output`, data source hoặc biến input rõ ràng sau khi PR phụ thuộc đã merge; không tạo lại resource thuộc owner khác.
 
 ## Quy ước làm việc
 
