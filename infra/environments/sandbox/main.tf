@@ -6,8 +6,6 @@ locals {
   common_tags = {
     Project     = "CDO08"
     Environment = "sandbox"
-    Team        = "CDO08"
-    Owner       = "thuy"
   }
 }
 
