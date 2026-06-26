@@ -48,7 +48,7 @@
 
 | Config / Secret | Source | Note |
 |---|---|---|
-| `AWS_REGION` | env var | ap-southeast-1 |
+| `AWS_REGION` | env var | us-west-2 |
 | `BASELINE_BACKEND` | env var | `s3` (prod) / `local` (dev fallback) |
 | `BASELINE_S3_BUCKET` | env var | bucket chứa per-service baseline JSON |
 | `BASELINE_S3_PREFIX` | env var | mặc định `baselines/` |
@@ -66,19 +66,19 @@
 
 | Aspect | Configuration |
 |---|---|
-| **Subnet type** | private |
-| **ALB** | internal only (không public-facing) |
+| **Subnet type** | public subnets cho ALB, private subnets cho ECS tasks |
+| **ALB** | internet-facing HTTPS ingress do từng CDO kiểm soát; ECS tasks không public IP |
 | **Security group** | `tf-4-ai-engine-sg` |
-| **Ingress rules** | chỉ allow từ CDO platforms trong cùng task force (SG-to-SG reference) |
+| **Ingress rules** | HTTPS tới ALB; ưu tiên allowlist CIDR nếu có thể; service vẫn enforce IAM SigV4 và `X-Tenant-Id` |
 | **Egress rules** | Cần egress tới AWS Services (CloudWatch ghi log, S3 đọc baseline) thông qua VPC Endpoint hoặc NAT Gateway. Không cần egress ra Internet public. |
-| **DNS** | resolve được trong VPC (route 53 private hosted zone) |
+| **DNS** | endpoint HTTPS thuộc từng CDO platform; private DNS là optional nếu triển khai internal-only sau này |
 
 ## Deployment topology diagram
 
 ```mermaid
 graph TD
-    Client["CDO Platforms (Payment, Fraud, Ledger)"] --> ALB["Internal ALB"]
-    ALB --> ECS["ECS Fargate Task (Foresight Lens API)"]
+    Client["CDO Prediction Lambda"] --> ALB["Public HTTPS ALB"]
+    ALB --> ECS["Private ECS Fargate Task (Foresight Lens API)"]
     ECS --> S3["Amazon S3 (Baseline Storage)"]
     ECS --> CW["CloudWatch (Audit Logs & Metrics)"]
 ```
@@ -95,9 +95,9 @@ Do mỗi CDO tự deploy engine lên hạ tầng riêng, URL sẽ thuộc về d
 
 | CDO platform | Endpoint URL | Auth |
 |---|---|---|
-| CDO-Payment | `https://ai-engine.payment.cdo-1.internal/` | IAM SigV4 |
-| CDO-Fraud | `https://ai-engine.fraud.cdo-2.internal/` | IAM SigV4 |
-| CDO-Ledger | `https://ai-engine.ledger.cdo-3.internal/` | IAM SigV4 |
+| CDO-Payment | `https://ai-engine.payment.cdo-1.example/` | IAM SigV4 |
+| CDO-Fraud | `https://ai-engine.fraud.cdo-2.example/` | IAM SigV4 |
+| CDO-Ledger | `https://ai-engine.ledger.cdo-3.example/` | IAM SigV4 |
 
 ## Rollout strategy: Canary
 

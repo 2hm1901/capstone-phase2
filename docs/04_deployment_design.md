@@ -59,11 +59,11 @@ Cấu trúc repo đề xuất:
 ```text
 infra/
 ├── modules/
-│   ├── network/              # VPC, private subnets, SG, internal ALB nếu cần
+│   ├── network/              # VPC, public/private subnets, SG, ALB path nếu cần
 │   ├── telemetry_ingest/     # API Gateway, Lambda Ingest, SQS, telemetry DLQ
 │   ├── telemetry_store/      # AMP workspace, remote-write/query config
 │   ├── prediction/           # EventBridge Scheduler, Prediction Lambda, Fallback Lambda
-│   ├── ai_engine/            # ECS Fargate service, task definition, internal ALB, CodeDeploy
+│   ├── ai_engine/            # ECS Fargate service, task definition, ALB, CodeDeploy
 │   ├── audit/                # DynamoDB audit table, KMS, TTL
 │   ├── observability/        # CloudWatch alarms/log groups, Grafana datasource/dashboard hooks
 │   └── security/             # IAM roles, KMS keys, Secrets/SSM parameters
@@ -139,9 +139,9 @@ Theo Deployment Contract, AI Engine Runtime của CDO08:
 | Health check | `/health`, 30s interval, healthy threshold 2, unhealthy threshold 3 |
 | API | `POST /v1/predict` |
 | Auth | IAM SigV4; W11 mock có thể optional theo AI API Contract |
-| Network | private subnet + internal ALB, không public-facing |
+| Network | public ALB ingress + ECS task trong private subnet |
 | Baseline storage | S3 bucket mã hóa KMS; engine fetch baseline hoặc cache 5 phút |
-| Logs | CloudWatch application logs 14 ngày; audit logs 3 năm, KMS encrypted |
+| Logs | CloudWatch application logs 14 ngày; audit logs 1 năm, KMS encrypted |
 
 CDO08 không sửa model logic. Nếu image AI không chạy, CDO08 report bằng evidence: image tag/digest, task log, health check response, env/config hiện tại.
 
@@ -251,7 +251,7 @@ Config chuẩn:
 | Lookback window | ≥120 phút |
 | Retry on `429` | exponential backoff 1s → 2s → 4s, tôn trọng `Retry-After` |
 | Retry on `503`/timeout | bounded retry rồi fallback |
-| Retry on `400` | không retry; fix client/request mapper |
+| Retry on `400`/`422` | không retry; fix client data/schema/request mapper |
 | Scheduler DLQ | không dùng trong scope hiện tại; dùng CloudWatch alarm |
 
 Smoke test:
@@ -312,7 +312,7 @@ Secrets/config:
 | `/aws/lambda/cdo08-prediction` | 14–30 ngày | PromQL query hash, AI status, latency |
 | `/aws/lambda/cdo08-fallback` | 14–30 ngày | fallback threshold decision |
 | `/ecs/cdo08-ai-engine/app` | 14 ngày | FastAPI app logs |
-| `/ecs/cdo08-ai-engine/audit` | 3 năm | AI audit fields theo contract |
+| `/ecs/cdo08-ai-engine/audit` | 1 năm | AI audit fields theo contract |
 
 ### 8.2 Alarms
 
