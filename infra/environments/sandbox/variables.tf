@@ -53,6 +53,10 @@ variable "telemetry_dlq_name" {
 
 variable "enable_writer_event_source_mapping" {
   description = "Enable SQS to Writer Lambda event source mapping only after the real telemetry queue output is available."
+  type        = bool
+  default     = false
+}
+
 # ---------------------------------------------------------------------------
 # observability_audit module variables
 # ---------------------------------------------------------------------------
@@ -121,6 +125,8 @@ variable "writer_log_retention_days" {
   description = "Telemetry Writer CloudWatch log retention in days."
   type        = number
   default     = 14
+}
+
 variable "grafana_workspace_id" {
   description = "Existing Amazon Managed Grafana workspace ID for reference mode. Set null to create a new workspace."
   type        = string

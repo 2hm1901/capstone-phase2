@@ -135,7 +135,7 @@ output "writer_lambda_arn" {
   value       = module.telemetry_store.writer_lambda_arn
 }
 
-output "writer_role_arn" {
+output "telemetry_writer_role_arn" {
   description = "Telemetry Writer IAM role ARN."
   value       = module.telemetry_store.writer_role_arn
 }
@@ -143,6 +143,7 @@ output "writer_role_arn" {
 output "writer_log_group_name" {
   description = "Telemetry Writer CloudWatch log group name."
   value       = module.telemetry_store.writer_log_group_name
+}
 module "observability_audit" {
   source = "../../modules/observability_audit"
 
