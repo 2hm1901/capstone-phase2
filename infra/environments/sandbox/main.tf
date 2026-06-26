@@ -21,6 +21,33 @@ module "networking" {
   tags                        = local.common_tags
 }
 
+data "archive_file" "ingest_placeholder" {
+  type        = "zip"
+  source_dir  = "../../packages/ingest_placeholder"
+  output_path = "../../packages/ingest_placeholder.zip"
+}
+
+module "telemetry_ingest" {
+  source = "../../modules/telemetry_ingest"
+
+  name_prefix         = local.name_prefix
+  api_stage           = "sandbox"
+  auth_mode           = "IAM"
+  lambda_package_path = data.archive_file.ingest_placeholder.output_path
+
+  lambda_timeout              = 10
+  lambda_memory               = 256
+  ingest_reserved_concurrency = 10
+
+  queue_retention_seconds    = 345600
+  visibility_timeout_seconds = 60
+  max_receive_count          = 5
+  log_retention_days         = 14
+
+  api_throttling_burst_limit = 1000
+  api_throttling_rate_limit  = 1000
+}
+
 module "telemetry_store" {
   source = "../../modules/telemetry_store"
 
@@ -28,12 +55,9 @@ module "telemetry_store" {
   environment         = "sandbox"
   amp_workspace_alias = "${local.name_prefix}-amp"
 
-  # TODO: replace these placeholder variables with module.telemetry_ingest
-  # outputs after Phuong's telemetry ingest module is merged. This module does
-  # not create a duplicate telemetry SQS queue or DLQ.
-  telemetry_queue_arn = var.telemetry_queue_arn
-  telemetry_queue_url = var.telemetry_queue_url
-  telemetry_dlq_name  = var.telemetry_dlq_name
+  telemetry_queue_arn = module.telemetry_ingest.queue_arn
+  telemetry_queue_url = module.telemetry_ingest.queue_url
+  telemetry_dlq_name  = module.telemetry_ingest.dlq_name
 
   enable_writer_event_source_mapping = var.enable_writer_event_source_mapping
 
