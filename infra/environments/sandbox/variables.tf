@@ -32,3 +32,9 @@ variable "ai_engine_alb_ingress_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "reviewer_principal_arns" {
+  description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
+  type        = list(string)
+  default     = []
+}
