@@ -261,11 +261,12 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 
 # Reviewer trust relationship document
 data "aws_iam_policy_document" "reviewer_assume_role" {
+  count = length(var.reviewer_principal_arns) > 0 ? 1 : 0
   statement {
     effect = "Allow"
     principals {
       type        = "AWS"
-      identifiers = length(var.reviewer_principal_arns) > 0 ? var.reviewer_principal_arns : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+      identifiers = var.reviewer_principal_arns
     }
     actions = ["sts:AssumeRole"]
   }
@@ -603,8 +604,9 @@ resource "aws_iam_role_policy" "scheduler_policy" {
 # 7.8. CDO-Reviewer-Role (Read-Only)
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "reviewer" {
+  count              = length(var.reviewer_principal_arns) > 0 ? 1 : 0
   name               = "${var.name_prefix}-reviewer-role"
-  assume_role_policy = data.aws_iam_policy_document.reviewer_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.reviewer_assume_role[0].json
   tags               = var.tags
 }
 
@@ -679,13 +681,15 @@ data "aws_iam_policy_document" "reviewer_deny" {
 }
 
 resource "aws_iam_role_policy" "reviewer_policy" {
+  count  = length(var.reviewer_principal_arns) > 0 ? 1 : 0
   name   = "reviewer-read-policy"
-  role   = aws_iam_role.reviewer.id
+  role   = aws_iam_role.reviewer[0].id
   policy = data.aws_iam_policy_document.reviewer.json
 }
 
 resource "aws_iam_role_policy" "reviewer_deny_policy" {
+  count  = length(var.reviewer_principal_arns) > 0 ? 1 : 0
   name   = "reviewer-deny-policy"
-  role   = aws_iam_role.reviewer.id
+  role   = aws_iam_role.reviewer[0].id
   policy = data.aws_iam_policy_document.reviewer_deny.json
 }

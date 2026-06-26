@@ -65,7 +65,7 @@ output "scheduler_role_arn" {
 
 output "reviewer_role_arn" {
   description = "ARN of the Reviewer role"
-  value       = aws_iam_role.reviewer.arn
+  value       = length(aws_iam_role.reviewer) > 0 ? aws_iam_role.reviewer[0].arn : null
 }
 
 output "ai_engine_app_log_group_name" {

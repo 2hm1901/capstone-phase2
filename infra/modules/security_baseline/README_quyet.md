@@ -11,7 +11,7 @@ Tôi đã xây dựng module mới **`security_baseline`** tại thư mục [inf
 ### 1.1. Hạ tầng Mã hóa & Lưu trữ
 - **KMS Customer Managed Key (CMK)**:
   - Khởi tạo key `alias/cdo08-sandbox-kms-key` phục vụ mã hóa tại chỗ (at rest) cho DynamoDB audit logs, CloudWatch Log groups và S3 baseline bucket.
-  - Thiết lập Key Policy phân quyền chặt chẽ cho tài khoản root, deployer, và cấp quyền cho dịch vụ CloudWatch Logs (`logs.us-west-2.amazonaws.com`) và DynamoDB sử dụng key để thực hiện Encrypt/Decrypt.
+  - Thiết lập Key Policy phân quyền chặt chẽ cho tài khoản root, deployer, và cấp quyền cho dịch vụ CloudWatch Logs (`logs.us-east-1.amazonaws.com`) và DynamoDB sử dụng key để thực hiện Encrypt/Decrypt.
 - **S3 Baseline Storage**:
   - Tạo bucket `cdo08-sandbox-ai-baselines-894597652722` dùng để lưu trữ baseline phục vụ AI Engine.
   - Bật Block Public Access, Versioning, mã hóa bằng **KMS CMK** (`aws_kms_key.security.arn`) đúng theo yêu cầu của contract.
@@ -29,15 +29,16 @@ Tôi đã xây dựng module mới **`security_baseline`** tại thư mục [inf
   - Đặt cấu hình `recovery_window_in_days = 0` (force delete) để dễ dàng dọn dẹp và test trong môi trường sandbox.
 - **SSM Parameters**:
   - Lưu cấu hình tĩnh không nhạy cảm: `amp/workspace_id`, `ai/endpoint`, `ai/baseline_bucket`, `ai/baseline_prefix`, `ai/otel_endpoint`.
+  - **Quy định Ownership**: Module `security_baseline` là **Owner chính thức** của namespace cấu hình này (được khởi tạo với giá trị placeholder). Các module khác (ví dụ: Lambda của Nam/Nhân) sẽ đóng vai trò **Consumer** (đọc giá trị cấu hình qua parameter store hoặc output từ module này) và chỉ thực hiện cập nhật giá trị runtime thông qua outputs/parameters mà không tự ý khởi tạo/khai báo lại các resource này để tránh xung đột ownership.
 
 ### 1.3. Cơ chế phân tách 8 IAM Roles độc lập (Least Privilege)
-Tôi đã chia tách và phân quyền riêng biệt cho 8 vai trò runtime trong hệ thống để giảm thiểu phạm vi ảnh hưởng (blast radius) khi có sự cố. 
+Tôi đã chia tách và phân quyền riêng biệt cho 8 vai trò runtime trong hệ thống để giảm thiểu phạm vi ảnh hưởng (blast radius) khi có sự cố.
 
 Đặc biệt, **assume role trust policies đã được phân tách rõ rệt**:
 - Generator và AI Engine: chỉ tin tưởng (`Service: ecs-tasks.amazonaws.com`).
 - Ingest, Writer, Prediction, Fallback: chỉ tin tưởng (`Service: lambda.amazonaws.com`).
 - Scheduler: chỉ tin tưởng (`Service: scheduler.amazonaws.com`).
-- Reviewer: trust policy được cấu hình linh động thông qua danh sách IAM ARNs chỉ định sẵn (`reviewer_principal_arns`) để tránh việc mở rộng scope cho toàn bộ account root.
+- Reviewer: Trust policy được cấu hình linh động thông qua danh sách IAM ARNs chỉ định sẵn (`reviewer_principal_arns`). **Nếu danh sách này trống (`[]`), vai trò `reviewer` cùng các policy tương ứng sẽ không được khởi tạo** để đảm bảo tuyệt đối không mở trust policy ra toàn bộ account root.
 
 Cụ thể 8 roles:
 1. **`generator`**: Chỉ được phép thực hiện `execute-api:Invoke` (chỉ gọi POST gửi dữ liệu lên Ingest API).
@@ -47,13 +48,13 @@ Cụ thể 8 roles:
 5. **`ai-engine`**: ECS Task role chỉ có quyền đọc file baseline từ S3 bucket và ghi metric/logs. **Không có bất kỳ quyền quản trị hay quyền ghi/xóa dữ liệu nào khác.**
 6. **`fallback`**: Có quyền đọc AMP, ghi log audit vào DynamoDB khi xảy ra fail-open và đọc secret Grafana.
 7. **`scheduler`**: Chỉ được phép `lambda:InvokeFunction` gọi Prediction Lambda.
-8. **`reviewer`**: Cấp cho người đánh giá/quản trị với quyền Read-Only (xem CloudWatch logs/metrics, query DynamoDB audit). Được áp dụng chính sách **Explicit Deny** ngăn chặn việc xem giá trị secrets động (Grafana token) và xóa/sửa dữ liệu logs audit.
+8. **`reviewer`**: Cấp cho người đánh giá/quản trị với quyền Read-Only (xem CloudWatch logs/metrics, query DynamoDB audit). Được áp dụng chính sách **Explicit Deny** ngăn chặn việc xem giá trị secrets động (Grafana token) và xóa/sửa dữ liệu logs audit. (Chỉ được tạo khi `reviewer_principal_arns` không rỗng).
 
 ---
 
 ## 2. Kết quả khi chạy `terraform plan`
 
-Khi chạy lệnh `terraform -chdir=infra/environments/sandbox plan` trên tài khoản `894597652722` (Region: `us-west-2`), Terraform sẽ đề xuất tạo mới **41 tài nguyên** (giảm 2 tài nguyên so với bản nháp đầu tiên do đã loại bỏ phần khởi tạo version cho secrets) và cập nhật các Output đầu ra sau:
+Khi chạy lệnh `terraform -chdir=infra/environments/sandbox plan` trên tài khoản `894597652722` (Region: `us-east-1`), Terraform sẽ đề xuất tạo mới **67 tài nguyên** (bao gồm cả các tài nguyên networking chưa được tạo ở vùng này) và cập nhật các Output đầu ra sau:
 
 ### 2.1. Danh sách Tài nguyên được tạo mới (41 tài nguyên)
 - `aws_kms_key.security` và `aws_kms_alias.security` (KMS CMK).
