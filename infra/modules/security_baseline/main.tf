@@ -99,7 +99,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "ai_baselines" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.security.arn
     }
   }
 }
@@ -152,21 +153,12 @@ resource "aws_secretsmanager_secret" "grafana_token" {
   tags                    = var.tags
 }
 
-resource "aws_secretsmanager_secret_version" "grafana_token" {
-  secret_id     = aws_secretsmanager_secret.grafana_token.id
-  secret_string = jsonencode({ token = "placeholder-grafana-token" })
-}
-
 resource "aws_secretsmanager_secret" "telemetry_ingest_key" {
   name                    = "${var.name_prefix}-telemetry-ingest-key"
   recovery_window_in_days = 0
   tags                    = var.tags
 }
 
-resource "aws_secretsmanager_secret_version" "telemetry_ingest_key" {
-  secret_id     = aws_secretsmanager_secret.telemetry_ingest_key.id
-  secret_string = jsonencode({ api_key = "placeholder-ingest-key" })
-}
 
 # ==============================================================================
 # 4. SSM PARAMETERS
@@ -243,25 +235,37 @@ resource "aws_ecr_repository" "ai_engine" {
 # 7. IAM ROLES & POLICIES (SEPARATED WORKLOADS)
 # ==============================================================================
 
-# Common trust relationship document for ECS and Lambda services
-data "aws_iam_policy_document" "services_assume_role" {
+# ECS tasks assume role trust document
+data "aws_iam_policy_document" "ecs_assume_role" {
   statement {
     effect = "Allow"
     principals {
       type        = "Service"
-      identifiers = ["lambda.amazonaws.com", "ecs-tasks.amazonaws.com"]
+      identifiers = ["ecs-tasks.amazonaws.com"]
     }
     actions = ["sts:AssumeRole"]
   }
 }
 
-# Reviewer trust relationship document (Assumed by local IAM users/roles)
+# Lambda functions assume role trust document
+data "aws_iam_policy_document" "lambda_assume_role" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+# Reviewer trust relationship document
 data "aws_iam_policy_document" "reviewer_assume_role" {
   statement {
     effect = "Allow"
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+      identifiers = length(var.reviewer_principal_arns) > 0 ? var.reviewer_principal_arns : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
     }
     actions = ["sts:AssumeRole"]
   }
@@ -308,7 +312,7 @@ data "aws_iam_policy_document" "cloudwatch_logs_create" {
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "generator" {
   name               = "${var.name_prefix}-generator-role"
-  assume_role_policy = data.aws_iam_policy_document.services_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume_role.json
   tags               = var.tags
 }
 
@@ -337,7 +341,7 @@ resource "aws_iam_role_policy" "generator_logs" {
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "ingest" {
   name               = "${var.name_prefix}-ingest-role"
-  assume_role_policy = data.aws_iam_policy_document.services_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
   tags               = var.tags
 }
 
@@ -369,7 +373,7 @@ resource "aws_iam_role_policy" "ingest_logs" {
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "writer" {
   name               = "${var.name_prefix}-writer-role"
-  assume_role_policy = data.aws_iam_policy_document.services_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
   tags               = var.tags
 }
 
@@ -409,7 +413,7 @@ resource "aws_iam_role_policy" "writer_logs" {
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "prediction" {
   name               = "${var.name_prefix}-prediction-role"
-  assume_role_policy = data.aws_iam_policy_document.services_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
   tags               = var.tags
 }
 
@@ -471,7 +475,7 @@ resource "aws_iam_role_policy" "prediction_logs" {
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "ai_engine" {
   name               = "${var.name_prefix}-ai-engine-role"
-  assume_role_policy = data.aws_iam_policy_document.services_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume_role.json
   tags               = var.tags
 }
 
@@ -521,7 +525,7 @@ resource "aws_iam_role_policy" "ai_engine_logs" {
 # ------------------------------------------------------------------------------
 resource "aws_iam_role" "fallback" {
   name               = "${var.name_prefix}-fallback-role"
-  assume_role_policy = data.aws_iam_policy_document.services_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
   tags               = var.tags
 }
 

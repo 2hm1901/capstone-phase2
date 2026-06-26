@@ -13,3 +13,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "reviewer_principal_arns" {
+  description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
+  type        = list(string)
+  default     = []
+}

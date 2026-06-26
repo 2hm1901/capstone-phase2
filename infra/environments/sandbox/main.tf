@@ -76,10 +76,11 @@ output "ai_engine_internet_gateway_id" {
 # ==============================================================================
 
 module "security_baseline" {
-  source      = "../../modules/security_baseline"
-  aws_region  = var.aws_region
-  name_prefix = local.name_prefix
-  tags        = local.common_tags
+  source                  = "../../modules/security_baseline"
+  aws_region              = var.aws_region
+  name_prefix             = local.name_prefix
+  tags                    = local.common_tags
+  reviewer_principal_arns = var.reviewer_principal_arns
 }
 
 # ==============================================================================
