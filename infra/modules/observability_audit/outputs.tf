@@ -8,16 +8,6 @@ output "audit_table_arn" {
   value       = aws_dynamodb_table.audit.arn
 }
 
-output "audit_writer_role_arn" {
-  description = "IAM role ARN for audit writers (Prediction/Fallback Lambda). PutItem only."
-  value       = aws_iam_role.audit_writer.arn
-}
-
-output "audit_reader_role_arn" {
-  description = "IAM role ARN for audit readers (Mentor/debug). Query + GetItem only, no Scan/Delete/PutItem. Null when audit_reader_principal_arns is empty."
-  value       = local.create_audit_reader ? aws_iam_role.audit_reader[0].arn : null
-}
-
 output "grafana_workspace_id" {
   description = "Amazon Managed Grafana workspace ID (created or referenced). Null when Grafana is deferred."
   value       = local.grafana_workspace_id

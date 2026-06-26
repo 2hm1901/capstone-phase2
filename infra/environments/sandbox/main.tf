@@ -50,6 +50,34 @@ module "prediction" {
   audit_table_arn              = null
   audit_table_name             = null
   grafana_api_token_secret_arn = null
+data "archive_file" "ingest_placeholder" {
+  type        = "zip"
+  source_dir  = "../../packages/ingest_placeholder"
+  output_path = "${path.root}/.terraform/ingest-placeholder.zip"
+}
+
+module "telemetry_ingest" {
+  source = "../../modules/telemetry_ingest"
+
+  name_prefix         = local.name_prefix
+  api_stage           = "sandbox"
+  auth_mode           = "IAM"
+  lambda_package_path = data.archive_file.ingest_placeholder.output_path
+  lambda_role_arn     = module.security_baseline.ingest_role_arn
+
+  lambda_timeout              = 10
+  lambda_memory               = 256
+  ingest_reserved_concurrency = 10
+
+  queue_retention_seconds    = 345600
+  visibility_timeout_seconds = 60
+  max_receive_count          = 5
+  log_retention_days         = 14
+
+  api_throttling_burst_limit = 1000
+  api_throttling_rate_limit  = 1000
+}
+
 module "telemetry_store" {
   source = "../../modules/telemetry_store"
 
@@ -57,12 +85,10 @@ module "telemetry_store" {
   environment         = "sandbox"
   amp_workspace_alias = "${local.name_prefix}-amp"
 
-  # TODO: replace these placeholder variables with module.telemetry_ingest
-  # outputs after Phuong's telemetry ingest module is merged. This module does
-  # not create a duplicate telemetry SQS queue or DLQ.
-  telemetry_queue_arn = var.telemetry_queue_arn
-  telemetry_queue_url = var.telemetry_queue_url
-  telemetry_dlq_name  = var.telemetry_dlq_name
+  telemetry_queue_arn = module.telemetry_ingest.queue_arn
+  telemetry_queue_url = module.telemetry_ingest.queue_url
+  telemetry_dlq_name  = module.telemetry_ingest.dlq_name
+  writer_role_arn     = module.security_baseline.writer_role_arn
 
   enable_writer_event_source_mapping = var.enable_writer_event_source_mapping
 
@@ -164,11 +190,6 @@ output "writer_lambda_arn" {
   value       = module.telemetry_store.writer_lambda_arn
 }
 
-output "telemetry_writer_role_arn" {
-  description = "Telemetry Writer IAM role ARN."
-  value       = module.telemetry_store.writer_role_arn
-}
-
 output "writer_log_group_name" {
   description = "Telemetry Writer CloudWatch log group name."
   value       = module.telemetry_store.writer_log_group_name
@@ -185,13 +206,11 @@ module "observability_audit" {
   audit_ttl_enabled    = var.audit_ttl_enabled
   audit_kms_key_arn    = module.security_baseline.kms_key_arn
 
-  audit_reader_principal_arns = var.audit_reader_principal_arns
-
   create_grafana_workspace = var.create_grafana_workspace
   grafana_workspace_id     = var.grafana_workspace_id
   grafana_workspace_name   = var.grafana_workspace_name
   grafana_datasource_uid   = var.grafana_datasource_uid
-  amp_workspace_id         = var.amp_workspace_id
+  amp_workspace_id         = module.telemetry_store.amp_workspace_id
   grafana_secret_arn       = module.security_baseline.grafana_secret_arn
 
   alarm_audit_write_error_threshold  = var.alarm_audit_write_error_threshold
@@ -209,16 +228,6 @@ output "audit_table_name" {
 output "audit_table_arn" {
   description = "ARN of the DynamoDB audit table."
   value       = module.observability_audit.audit_table_arn
-}
-
-output "audit_writer_role_arn" {
-  description = "IAM role ARN for audit writers (Prediction/Fallback Lambda). PutItem only."
-  value       = module.observability_audit.audit_writer_role_arn
-}
-
-output "audit_reader_role_arn" {
-  description = "IAM role ARN for audit readers (Mentor/debug). Query + GetItem only."
-  value       = module.observability_audit.audit_reader_role_arn
 }
 
 output "grafana_workspace_id" {

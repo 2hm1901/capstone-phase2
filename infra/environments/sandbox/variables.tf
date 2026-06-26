@@ -81,12 +81,6 @@ variable "audit_ttl_enabled" {
   default     = true
 }
 
-variable "audit_reader_principal_arns" {
-  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role."
-  type        = list(string)
-  default     = []
-}
-
 variable "create_grafana_workspace" {
   description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
   type        = bool
@@ -155,12 +149,6 @@ variable "grafana_workspace_name" {
 
 variable "grafana_datasource_uid" {
   description = "Existing Grafana datasource UID for the AMP workspace. Set null to defer datasource wiring until the AMP module merges."
-  type        = string
-  default     = null
-}
-
-variable "amp_workspace_id" {
-  description = "Amazon Managed Prometheus workspace ID consumed to configure a Grafana AMP datasource. Set null to defer datasource wiring until the AMP module merges."
   type        = string
   default     = null
 }

@@ -3,7 +3,6 @@ data "aws_caller_identity" "current" {}
 locals {
   audit_table_name       = coalesce(var.audit_table_name, "${var.name_prefix}-audit")
   grafana_workspace_name = coalesce(var.grafana_workspace_name, "${var.name_prefix}-grafana")
-  create_audit_reader    = length(var.audit_reader_principal_arns) > 0
 }
 
 # -----------------------------------------------------------------------------
@@ -63,113 +62,6 @@ resource "aws_dynamodb_table" "audit" {
     Name = local.audit_table_name
     Role = "prediction-fallback-audit"
   })
-}
-
-# -----------------------------------------------------------------------------
-# IAM writer role for audit table (Prediction / Fallback Lambda)
-# PutItem only, scoped to the audit table ARN. Tenant isolation is enforced at
-# the ingest/application layer (X-Tenant-Id validation per docs 4.1), not via
-# DynamoDB LeadingKeys conditions, because the PK format (tenant_id#service_id)
-# is not known to IAM policy authoring and a wrong LeadingKeys pattern would
-# silently deny legitimate writes.
-# Writer Lambda (telemetry) does NOT receive this role.
-# -----------------------------------------------------------------------------
-data "aws_iam_policy_document" "audit_writer_assume" {
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "audit_writer" {
-  name               = "${var.name_prefix}-audit-writer-role"
-  assume_role_policy = data.aws_iam_policy_document.audit_writer_assume.json
-  tags               = merge(var.tags, { Name = "${var.name_prefix}-audit-writer-role" })
-}
-
-data "aws_iam_policy_document" "audit_writer" {
-  statement {
-    sid       = "PutAuditItem"
-    effect    = "Allow"
-    actions   = ["dynamodb:PutItem"]
-    resources = [aws_dynamodb_table.audit.arn]
-  }
-
-  statement {
-    sid       = "NoScanDelete"
-    effect    = "Deny"
-    actions   = ["dynamodb:Scan", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:GetItem"]
-    resources = [aws_dynamodb_table.audit.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "audit_writer" {
-  name   = "${var.name_prefix}-audit-writer-policy"
-  role   = aws_iam_role.audit_writer.id
-  policy = data.aws_iam_policy_document.audit_writer.json
-}
-
-# -----------------------------------------------------------------------------
-# IAM reader role for audit table (Mentor / debug)
-# Created only when var.audit_reader_principal_arns is non-empty; those ARNs are
-# the only principals allowed to assume the role. When the list is empty the
-# reader role is not created and the output is null (fail-safe: no implicit
-# account-root access).
-# Query + GetItem only. No Scan, no Delete, no PutItem.
-# -----------------------------------------------------------------------------
-data "aws_iam_policy_document" "audit_reader_assume" {
-  count = local.create_audit_reader ? 1 : 0
-
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "AWS"
-      identifiers = var.audit_reader_principal_arns
-    }
-  }
-}
-
-resource "aws_iam_role" "audit_reader" {
-  count              = local.create_audit_reader ? 1 : 0
-  name               = "${var.name_prefix}-audit-reader-role"
-  assume_role_policy = data.aws_iam_policy_document.audit_reader_assume[0].json
-  tags               = merge(var.tags, { Name = "${var.name_prefix}-audit-reader-role" })
-}
-
-data "aws_iam_policy_document" "audit_reader" {
-  count = local.create_audit_reader ? 1 : 0
-
-  statement {
-    sid    = "QueryGetAudit"
-    effect = "Allow"
-    actions = [
-      "dynamodb:Query",
-      "dynamodb:GetItem"
-    ]
-    resources = [
-      aws_dynamodb_table.audit.arn,
-      "${aws_dynamodb_table.audit.arn}/index/*"
-    ]
-  }
-
-  statement {
-    sid       = "NoScanDeletePut"
-    effect    = "Deny"
-    actions   = ["dynamodb:Scan", "dynamodb:DeleteItem", "dynamodb:PutItem"]
-    resources = [aws_dynamodb_table.audit.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "audit_reader" {
-  count  = local.create_audit_reader ? 1 : 0
-  name   = "${var.name_prefix}-audit-reader-policy"
-  role   = aws_iam_role.audit_reader[0].id
-  policy = data.aws_iam_policy_document.audit_reader[0].json
 }
 
 # -----------------------------------------------------------------------------

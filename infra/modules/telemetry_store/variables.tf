@@ -24,6 +24,11 @@ variable "telemetry_dlq_name" {
   default     = null
 }
 
+variable "writer_role_arn" {
+  description = "IAM role ARN for Telemetry Writer. Owned by the security_baseline module."
+  type        = string
+}
+
 variable "enable_writer_event_source_mapping" {
   description = "Whether to create the SQS event source mapping from the real telemetry queue to Writer Lambda."
   type        = bool
