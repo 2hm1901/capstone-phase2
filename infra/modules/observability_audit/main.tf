@@ -93,9 +93,9 @@ resource "aws_iam_role" "audit_writer" {
 
 data "aws_iam_policy_document" "audit_writer" {
   statement {
-    sid     = "PutAuditItem"
-    effect  = "Allow"
-    actions = ["dynamodb:PutItem"]
+    sid       = "PutAuditItem"
+    effect    = "Allow"
+    actions   = ["dynamodb:PutItem"]
     resources = [aws_dynamodb_table.audit.arn]
   }
 
@@ -135,10 +135,10 @@ data "aws_iam_policy_document" "audit_reader_assume" {
 }
 
 resource "aws_iam_role" "audit_reader" {
-  count  = local.create_audit_reader ? 1 : 0
-  name   = "${var.name_prefix}-audit-reader-role"
+  count              = local.create_audit_reader ? 1 : 0
+  name               = "${var.name_prefix}-audit-reader-role"
   assume_role_policy = data.aws_iam_policy_document.audit_reader_assume[0].json
-  tags   = merge(var.tags, { Name = "${var.name_prefix}-audit-reader-role" })
+  tags               = merge(var.tags, { Name = "${var.name_prefix}-audit-reader-role" })
 }
 
 data "aws_iam_policy_document" "audit_reader" {

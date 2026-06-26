@@ -55,12 +55,6 @@ variable "audit_ttl_enabled" {
   default     = true
 }
 
-variable "audit_kms_key_arn" {
-  description = "Customer-managed KMS key ARN for DynamoDB SSE-KMS. Set null to use AWS-owned key (defer CMK wiring until the security module merges)."
-  type        = string
-  default     = null
-}
-
 variable "audit_reader_principal_arns" {
   description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role."
   type        = list(string)
@@ -97,12 +91,6 @@ variable "amp_workspace_id" {
   default     = null
 }
 
-variable "grafana_secret_arn" {
-  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Set null to defer until the security module merges."
-  type        = string
-  default     = null
-}
-
 variable "alarm_audit_write_error_threshold" {
   description = "Threshold for the audit write error alarm (number of errors in the evaluation period)."
   type        = number
@@ -132,6 +120,7 @@ variable "alarm_fallback_count_period_secs" {
   type        = number
   default     = 300
 }
+
 variable "reviewer_principal_arns" {
   description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
   type        = list(string)

@@ -81,7 +81,7 @@ module "observability_audit" {
   audit_table_name     = var.audit_table_name
   audit_retention_days = var.audit_retention_days
   audit_ttl_enabled    = var.audit_ttl_enabled
-  audit_kms_key_arn    = var.audit_kms_key_arn
+  audit_kms_key_arn    = module.security_baseline.kms_key_arn
 
   audit_reader_principal_arns = var.audit_reader_principal_arns
 
@@ -90,7 +90,7 @@ module "observability_audit" {
   grafana_workspace_name   = var.grafana_workspace_name
   grafana_datasource_uid   = var.grafana_datasource_uid
   amp_workspace_id         = var.amp_workspace_id
-  grafana_secret_arn       = var.grafana_secret_arn
+  grafana_secret_arn       = module.security_baseline.grafana_secret_arn
 
   alarm_audit_write_error_threshold  = var.alarm_audit_write_error_threshold
   alarm_annotation_error_period_secs = var.alarm_annotation_error_period_secs
@@ -124,11 +124,6 @@ output "grafana_workspace_id" {
   value       = module.observability_audit.grafana_workspace_id
 }
 
-output "grafana_secret_arn" {
-  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Null when deferred."
-  value       = module.observability_audit.grafana_secret_arn
-}
-
 output "annotation_audit_log_group_name" {
   description = "CloudWatch Logs log group for annotation/audit structured logs."
   value       = module.observability_audit.annotation_audit_log_group_name
@@ -142,6 +137,8 @@ output "observability_alarm_names" {
 output "observability_dashboard_name" {
   description = "CloudWatch dashboard name summarizing audit/annotation/fallback health."
   value       = module.observability_audit.dashboard_name
+}
+
 # ==============================================================================
 # Security Baseline Module Call
 # ==============================================================================
