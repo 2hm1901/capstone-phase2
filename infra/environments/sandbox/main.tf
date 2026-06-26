@@ -9,8 +9,6 @@ locals {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
 module "networking" {
   source = "../../modules/networking"
 
@@ -24,28 +22,21 @@ module "networking" {
 }
 
 # ---------------------------------------------------------------------------
-# Synthetic Generator (Owner: Thuy)
-#
-# Consumes networking outputs; no new VPC/subnet/SG created here.
-#
-# ingest_api_endpoint is a placeholder until module.telemetry_ingest
-# (owned by Phuong) is merged.  Wire the real endpoint by replacing the
-# default value with: module.telemetry_ingest.ingest_api_url
-# ---------------------------------------------------------------------------
 module "synthetic_generator" {
   source = "../../modules/synthetic_generator"
 
-  name_prefix    = local.name_prefix
-  aws_region     = var.aws_region
-  aws_account_id = data.aws_caller_identity.current.account_id
-  tags           = local.common_tags
+  name_prefix = local.name_prefix
+  aws_region  = var.aws_region
+  tags        = local.common_tags
 
   # Networking — from module.networking (no new VPC/SG)
   vpc_id                      = module.networking.workload_vpc_id
   private_subnet_ids          = module.networking.workload_private_subnet_ids
   generator_security_group_id = module.networking.generator_security_group_id
+  task_role_arn               = module.security_baseline.generator_role_arn
 
-  # Container image — leave empty until image is built and pushed to ECR
+  # Empty image means Terraform creates the generator ECR/cluster scaffolding
+  # only; task definition and schedule stay disabled until the image exists.
   generator_image_uri = var.generator_image_uri
 
   # Generator behaviour
@@ -54,10 +45,7 @@ module "synthetic_generator" {
   scenario_list         = var.generator_scenario_list
   emit_interval_seconds = var.generator_emit_interval_seconds
 
-  # Telemetry ingest endpoint
-  # TODO: replace placeholder with module.telemetry_ingest.ingest_api_url
-  # once Phuong's telemetry_ingest module is merged.
-  ingest_api_endpoint = var.ingest_api_endpoint
+  ingest_api_endpoint = module.telemetry_ingest.api_endpoint
 
   log_retention_days = var.generator_log_retention_days
 }
@@ -237,6 +225,8 @@ output "generator_log_group_name" {
 output "generator_ecr_repository_url" {
   description = "ECR repository URL for the generator image."
   value       = module.synthetic_generator.ecr_repository_url
+}
+
 output "amp_workspace_id" {
   description = "AMP workspace ID for the primary telemetry store."
   value       = module.telemetry_store.amp_workspace_id

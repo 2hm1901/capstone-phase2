@@ -15,12 +15,12 @@ output "cluster_name" {
 
 output "task_definition_arn" {
   description = "ARN of the latest ECS task definition revision for the generator."
-  value       = aws_ecs_task_definition.generator.arn
+  value       = try(aws_ecs_task_definition.generator[0].arn, null)
 }
 
 output "task_role_arn" {
   description = "ARN of the IAM task role attached to the generator container. Has execute-api:Invoke on telemetry ingest only — no AMP write, no admin."
-  value       = aws_iam_role.task_role.arn
+  value       = var.task_role_arn
 }
 
 output "task_execution_role_arn" {
@@ -50,7 +50,7 @@ output "ecr_repository_arn" {
 
 output "schedule_rule_name" {
   description = "Name of the EventBridge schedule rule (DISABLED by default; enable manually for test windows)."
-  value       = aws_cloudwatch_event_rule.generator_schedule.name
+  value       = try(aws_cloudwatch_event_rule.generator_schedule[0].name, null)
 }
 
 output "generator_security_group_id" {

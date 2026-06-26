@@ -1,6 +1,6 @@
 # Module: synthetic_generator
 
-**Owner:** Thuy (CDO08)  
+**Owner:** Thuy (CDO08)
 **Branch:** `feature/terraform-synthetic-generator-thuy`
 
 ## Mục đích
@@ -15,20 +15,22 @@ Telemetry được gửi tới Telemetry Entry (module của Phương) theo sche
 |---|---|---|
 | ECR repository | `cdo08-sandbox-generator` | Lưu generator image, scan on push, immutable tags |
 | ECS cluster | `cdo08-sandbox-generator-cluster` | Dedicated cluster, FARGATE capacity provider |
-| ECS task definition | `cdo08-sandbox-generator` | Fargate, awsvpc, non-root, no inbound port |
+| ECS task definition | `cdo08-sandbox-generator` | Chỉ tạo khi `generator_image_uri` khác rỗng |
 | IAM task execution role | `cdo08-sandbox-generator-execution-role` | ECR pull + CW Logs write |
-| IAM task role | `cdo08-sandbox-generator-task-role` | `execute-api:Invoke` trên telemetry ingest only — **không có quyền AMP write** |
-| IAM EventBridge role | `cdo08-sandbox-generator-events-role` | Chỉ `ecs:RunTask` + `iam:PassRole` cho cluster này |
+| IAM task role | `module.security_baseline.generator_role_arn` | Runtime role do Quyết owner; không tạo role trùng trong module này |
+| IAM EventBridge role | `cdo08-sandbox-generator-events-role` | Chỉ tạo khi có task definition |
 | CloudWatch log group | `/ecs/cdo08-sandbox-generator` | Retention 14 ngày (configurable) |
-| EventBridge rule | `cdo08-sandbox-generator-schedule` | **DISABLED by default** — chỉ bật khi cần test window |
+| EventBridge rule | `cdo08-sandbox-generator-schedule` | Chỉ tạo khi có image; **DISABLED by default** |
 
 ## Tài nguyên KHÔNG tạo ở đây
 
 - VPC / subnet / security group → `module.networking`
 - API Gateway / SQS / AMP → `module.telemetry_ingest` / `module.telemetry_store`
-- KMS / Secrets Manager → `module.security`
+- KMS / Secrets Manager / runtime IAM role → `module.security_baseline`
 
 ## Cách kích hoạt generator task
+
+> Chỉ chạy các lệnh dưới đây sau khi đã build/push image và set `generator_image_uri`.
 
 ### Cách 1: Run-task thủ công (khuyến nghị cho test window)
 
@@ -72,24 +74,27 @@ Trong `infra/environments/sandbox/main.tf`, có thể thêm overrides vào modul
 
 | Variable | Default | Mô tả |
 |---|---|---|
-| `generator_image_uri` | `""` | URI image ECR. Để trống khi image chưa build. |
-| `ingest_api_endpoint` | `PLACEHOLDER` | URL ingest API. Cập nhật sau khi Phương merge module. |
+| `generator_image_uri` | `""` | URI image ECR. Để trống thì chỉ tạo ECR/cluster scaffold, chưa tạo task definition/schedule. |
+| `ingest_api_endpoint` | required | URL ingest API, wire từ `module.telemetry_ingest.api_endpoint`. |
+| `task_role_arn` | required | Runtime role từ `module.security_baseline.generator_role_arn`. |
 | `tenant_id` | `tenant-cdo08-demo` | Tenant ID cho mọi event |
 | `service_list` | `payment-api,queue-worker,gateway-api` | Danh sách service |
 | `scenario_list` | `gradual_drift,sudden_spike,slow_leak,noisy_baseline` | Các scenario test |
 | `emit_interval_seconds` | `60` | Tần suất emit (giây) |
 
-## Dependency wiring còn pending
+## Dependency wiring
 
-`ingest_api_endpoint` hiện dùng placeholder. Sau khi Phương merge `module.telemetry_ingest`:
+`sandbox/main.tf` phải wire:
 
-1. Sửa `sandbox/main.tf` để pass `module.telemetry_ingest.ingest_api_url` vào biến này.
-2. Tương tự cập nhật IAM resource ARN trong task role policy từ `*` thành ARN cụ thể.
-3. Chạy lại `terraform plan` và attach output vào PR update.
+```hcl
+ingest_api_endpoint = module.telemetry_ingest.api_endpoint
+task_role_arn       = module.security_baseline.generator_role_arn
+```
 
 ## Security
 
-- Task role **không có** quyền `aps:RemoteWrite` hay bất kỳ AMP action nào.
+- Task role do `security_baseline` quản lý; module này không tạo IAM role runtime riêng.
+- Generator role **không có** quyền `aps:RemoteWrite` hay bất kỳ AMP action nào.
 - Không có static AWS credential trong container — IAM role via ECS task metadata.
 - Không có public inbound port trên task.
 - Image scan enabled; ECR lifecycle giữ tối đa 5 images.

@@ -8,13 +8,12 @@
 #   - ECS cluster (generator-dedicated; no shared cluster exists yet)
 #   - CloudWatch log group  /ecs/cdo08-sandbox-generator
 #   - IAM task execution role  (pull ECR + write CW logs)
-#   - IAM task role           (invoke telemetry API only; no direct AMP write)
-#   - ECS task definition
+#   - ECS task definition when a generator image URI is provided
 #
 # Resources NOT created here (owned elsewhere):
 #   - VPC / subnets / security groups  → module.networking
 #   - API Gateway / SQS / AMP          → module.telemetry_ingest / module.telemetry_store
-#   - KMS / Secrets Manager baseline   → module.security
+#   - KMS / Secrets Manager / runtime IAM roles → module.security_baseline
 #
 # How to trigger a generator run:
 #   aws ecs run-task \
@@ -158,63 +157,6 @@ resource "aws_iam_role_policy" "ecr_pull" {
 }
 
 # ---------------------------------------------------------------------------
-# IAM — task role
-# Grants ONLY the ability for the running container to call the telemetry
-# ingest API endpoint.  No direct AMP write, no admin/wildcard permissions.
-# ---------------------------------------------------------------------------
-
-resource "aws_iam_role" "task_role" {
-  name               = "${var.name_prefix}-generator-task-role"
-  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
-  description        = "IAM task role for synthetic generator — may only invoke the telemetry ingest API. No AMP write, no admin."
-
-  tags = merge(var.tags, {
-    Name      = "${var.name_prefix}-generator-task-role"
-    Component = "synthetic-generator"
-  })
-}
-
-data "aws_iam_policy_document" "task_role_permissions" {
-  # Allow calling the API Gateway telemetry ingest endpoint via IAM auth.
-  # Resource is scoped to POST /v1/ingest on the specific API; once
-  # Phuong's telemetry_ingest module merges, replace the placeholder ARN
-  # with the actual module output.
-  statement {
-    sid    = "InvokeTelemetryIngestAPI"
-    effect = "Allow"
-    actions = [
-      "execute-api:Invoke",
-    ]
-    # Scoped to POST method on /v1/ingest of the ingest API only.
-    # Format: arn:aws:execute-api:<region>:<account>:<api-id>/<stage>/POST/ingest
-    # Update once telemetry_ingest module is merged; use a placeholder for now.
-    resources = [
-      "arn:aws:execute-api:${var.aws_region}:${var.aws_account_id}:*/*/POST/ingest",
-    ]
-  }
-
-  # Allow writing logs — containers write directly via awslogs driver,
-  # but explicit permission is a defence-in-depth measure.
-  statement {
-    sid    = "WriteCloudWatchLogs"
-    effect = "Allow"
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ]
-    resources = [
-      "${aws_cloudwatch_log_group.generator.arn}:*",
-    ]
-  }
-}
-
-resource "aws_iam_role_policy" "task_role_permissions" {
-  name   = "${var.name_prefix}-generator-task-permissions"
-  role   = aws_iam_role.task_role.id
-  policy = data.aws_iam_policy_document.task_role_permissions.json
-}
-
-# ---------------------------------------------------------------------------
 # ECS cluster — dedicated to the synthetic generator
 # (No shared cluster exists; a lightweight cluster is appropriate here)
 # ---------------------------------------------------------------------------
@@ -250,14 +192,12 @@ resource "aws_ecs_cluster_capacity_providers" "generator" {
 # ---------------------------------------------------------------------------
 
 locals {
-  # Use the provided image URI, or fall back to a placeholder string that
-  # makes the plan readable while the real image is not yet built.
-  effective_image = var.generator_image_uri != "" ? var.generator_image_uri : "IMAGE_NOT_YET_BUILT_SEE_PR"
+  create_task_definition = var.generator_image_uri != ""
 
   container_definition = [
     {
       name      = "generator"
-      image     = local.effective_image
+      image     = var.generator_image_uri
       essential = true
 
       # Resource limits — matches task-level CPU/memory allocation
@@ -275,8 +215,6 @@ locals {
         { name = "SERVICE_LIST", value = var.service_list },
         { name = "SCENARIO_LIST", value = var.scenario_list },
         { name = "EMIT_INTERVAL_SECONDS", value = tostring(var.emit_interval_seconds) },
-        # INGEST_API_ENDPOINT carries a placeholder until Phuong's module merges.
-        # Update sandbox/main.tf to wire module.telemetry_ingest.ingest_api_url here.
         { name = "INGEST_API_ENDPOINT", value = var.ingest_api_endpoint },
         { name = "AWS_REGION", value = var.aws_region },
       ]
@@ -294,21 +232,20 @@ locals {
       }
 
       readonlyRootFilesystem = true
-
-      # No privileged mode
-      privileged = false
     }
   ]
 }
 
 resource "aws_ecs_task_definition" "generator" {
+  count = local.create_task_definition ? 1 : 0
+
   family                   = "${var.name_prefix}-generator"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = tostring(var.task_cpu)
   memory                   = tostring(var.task_memory)
   execution_role_arn       = aws_iam_role.task_execution.arn
-  task_role_arn            = aws_iam_role.task_role.arn
+  task_role_arn            = var.task_role_arn
 
   container_definitions = jsonencode(local.container_definition)
 
@@ -334,6 +271,8 @@ resource "aws_ecs_task_definition" "generator" {
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_event_rule" "generator_schedule" {
+  count = local.create_task_definition ? 1 : 0
+
   name                = "${var.name_prefix}-generator-schedule"
   description         = "Periodic trigger for synthetic generator task (disabled outside test windows)."
   schedule_expression = "rate(1 hour)"
@@ -346,13 +285,15 @@ resource "aws_cloudwatch_event_rule" "generator_schedule" {
 }
 
 resource "aws_cloudwatch_event_target" "generator_schedule" {
-  rule      = aws_cloudwatch_event_rule.generator_schedule.name
+  count = local.create_task_definition ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.generator_schedule[0].name
   target_id = "GeneratorECSTask"
   arn       = aws_ecs_cluster.generator.arn
-  role_arn  = aws_iam_role.events_ecs.arn
+  role_arn  = aws_iam_role.events_ecs[0].arn
 
   ecs_target {
-    task_definition_arn = aws_ecs_task_definition.generator.arn
+    task_definition_arn = aws_ecs_task_definition.generator[0].arn
     task_count          = 1
     launch_type         = "FARGATE"
 
@@ -378,6 +319,8 @@ data "aws_iam_policy_document" "events_assume" {
 }
 
 resource "aws_iam_role" "events_ecs" {
+  count = local.create_task_definition ? 1 : 0
+
   name               = "${var.name_prefix}-generator-events-role"
   assume_role_policy = data.aws_iam_policy_document.events_assume.json
   description        = "IAM role allowing EventBridge to launch generator ECS tasks."
@@ -389,13 +332,15 @@ resource "aws_iam_role" "events_ecs" {
 }
 
 data "aws_iam_policy_document" "events_ecs_permissions" {
+  count = local.create_task_definition ? 1 : 0
+
   statement {
     sid    = "RunGeneratorTask"
     effect = "Allow"
     actions = [
       "ecs:RunTask",
     ]
-    resources = [aws_ecs_task_definition.generator.arn]
+    resources = [aws_ecs_task_definition.generator[0].arn]
 
     condition {
       test     = "ArnEquals"
@@ -413,13 +358,15 @@ data "aws_iam_policy_document" "events_ecs_permissions" {
     ]
     resources = [
       aws_iam_role.task_execution.arn,
-      aws_iam_role.task_role.arn,
+      var.task_role_arn,
     ]
   }
 }
 
 resource "aws_iam_role_policy" "events_ecs_permissions" {
+  count = local.create_task_definition ? 1 : 0
+
   name   = "${var.name_prefix}-generator-events-permissions"
-  role   = aws_iam_role.events_ecs.id
-  policy = data.aws_iam_policy_document.events_ecs_permissions.json
+  role   = aws_iam_role.events_ecs[0].id
+  policy = data.aws_iam_policy_document.events_ecs_permissions[0].json
 }

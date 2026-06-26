@@ -45,10 +45,16 @@ variable "generator_image_uri" {
   description = <<-EOT
     Full ECR URI for the synthetic generator image including tag or digest,
     e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/cdo08-generator:sha256-abc.
-    Leave empty/null during initial IaC scaffolding before the image is built.
+    Leave empty during initial IaC scaffolding before the image is built; the
+    module will create ECR/cluster scaffolding but skip task definition/schedule.
   EOT
   type        = string
   default     = ""
+}
+
+variable "task_role_arn" {
+  description = "Runtime task role ARN for the generator from security_baseline."
+  type        = string
 }
 
 # ---------------------------------------------------------------------------
@@ -102,12 +108,10 @@ variable "emit_interval_seconds" {
 variable "ingest_api_endpoint" {
   description = <<-EOT
     HTTPS endpoint the generator posts telemetry to,
-    e.g. https://<api-id>.execute-api.<region>.amazonaws.com/v1/ingest.
-    Set to placeholder until Phuong's telemetry_ingest module is merged;
-    wiring is deferred and documented in the PR description.
+    e.g. https://<api-id>.execute-api.<region>.amazonaws.com/sandbox/v1/telemetry.
+    This should be wired from module.telemetry_ingest.api_endpoint.
   EOT
   type        = string
-  default     = "https://PLACEHOLDER.execute-api.us-east-1.amazonaws.com/v1/ingest"
 }
 
 # ---------------------------------------------------------------------------
@@ -131,10 +135,5 @@ variable "log_retention_days" {
 
 variable "aws_region" {
   description = "AWS region where the module is deployed."
-  type        = string
-}
-
-variable "aws_account_id" {
-  description = "AWS account ID — used to scope IAM policy resource ARNs."
   type        = string
 }
