@@ -2,251 +2,9 @@ locals {
   prediction_lambda_name      = "${var.name_prefix}-prediction-lambda"
   serving_adapter_lambda_name = "${var.name_prefix}-serving-adapter-lambda"
   fallback_lambda_name        = "${var.name_prefix}-fallback-lambda"
-
-  amp_workspace_resource = var.amp_workspace_arn != null ? var.amp_workspace_arn : "arn:aws:aps:${var.aws_region}:*:workspace/placeholder"
-  audit_table_resource   = var.audit_table_arn != null ? var.audit_table_arn : "arn:aws:dynamodb:${var.aws_region}:*:table/placeholder-audit"
-}
-# IAM EventBridge
-resource "aws_iam_role" "scheduler_role" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-scheduler-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "scheduler.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = var.tags
 }
 
-resource "aws_iam_role_policy" "scheduler_policy" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-scheduler-policy"
-  role  = aws_iam_role.scheduler_role[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "lambda:InvokeFunction"
-      ]
-      Resource = aws_lambda_function.prediction_lambda[0].arn
-    }]
-  })
-}
-
-#IAM Lambda Prediction
-resource "aws_iam_role" "prediction_lambda_role" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-prediction-lambda-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy" "prediction_lambda_policy" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-prediction-lambda-policy"
-  role  = aws_iam_role.prediction_lambda_role[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "WriteLogs"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${local.prediction_lambda_name}:*"
-      },
-      {
-        Sid    = "QueryAmpWorkspace"
-        Effect = "Allow"
-        Action = [
-          "aps:QueryMetrics",
-          "aps:GetSeries",
-          "aps:GetLabels",
-          "aps:GetMetricMetadata"
-        ]
-        Resource = local.amp_workspace_resource
-      },
-      {
-        Sid    = "InvokeServingAdapterOnly"
-        Effect = "Allow"
-        Action = [
-          "lambda:InvokeFunction"
-        ]
-        Resource = aws_lambda_function.serving_adapter_lambda[0].arn
-      },
-      {
-        Sid    = "WriteAuditRecord"
-        Effect = "Allow"
-        Action = [
-          "dynamodb:PutItem",
-          "dynamodb:GetItem",
-          "dynamodb:Query"
-        ]
-        Resource = local.audit_table_resource
-      },
-      {
-        Sid    = "ReadGrafanaTokenIfNeeded"
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Resource = var.grafana_api_token_secret_arn != null ? var.grafana_api_token_secret_arn : "arn:aws:secretsmanager:${var.aws_region}:*:secret:placeholder-grafana-*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role" "serving_adapter_lambda_role" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-serving-adapter-lambda-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = var.tags
-}
-
-# IAM Lambda Serving adpater
-resource "aws_iam_role_policy" "serving_adapter_lambda_policy" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-serving-adapter-lambda-policy"
-  role  = aws_iam_role.serving_adapter_lambda_role[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat(
-      [
-        {
-          Sid    = "WriteLogs"
-          Effect = "Allow"
-          Action = [
-            "logs:CreateLogStream",
-            "logs:PutLogEvents"
-          ]
-          Resource = "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${local.serving_adapter_lambda_name}:*"
-        },
-        {
-          Sid    = "InvokeFallbackLambda"
-          Effect = "Allow"
-          Action = [
-            "lambda:InvokeFunction"
-          ]
-          Resource = aws_lambda_function.fallback_lambda[0].arn
-        }
-      ],
-      var.ai_engine_invoke_arn != null ? [
-        {
-          Sid    = "InvokeAiEngineIfApiManaged"
-          Effect = "Allow"
-          Action = [
-            "execute-api:Invoke"
-          ]
-          Resource = var.ai_engine_invoke_arn
-        }
-      ] : []
-    )
-  })
-}
-
-# IAM Lambda Fallback
-resource "aws_iam_role" "fallback_lambda_role" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-fallback-lambda-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy" "fallback_lambda_policy" {
-  count = var.enable_prediction ? 1 : 0
-  name  = "${var.name_prefix}-fallback-lambda-policy"
-  role  = aws_iam_role.fallback_lambda_role[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "WriteLogs"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${local.fallback_lambda_name}:*"
-      },
-      {
-        Sid    = "QueryAmpWorkspace"
-        Effect = "Allow"
-        Action = [
-          "aps:QueryMetrics",
-          "aps:GetSeries",
-          "aps:GetLabels",
-          "aps:GetMetricMetadata"
-        ]
-        Resource = local.amp_workspace_resource
-      },
-      {
-        Sid    = "WriteAuditRecord"
-        Effect = "Allow"
-        Action = [
-          "dynamodb:PutItem"
-        ]
-        Resource = local.audit_table_resource
-      },
-      {
-        Sid    = "ReadGrafanaTokenIfNeeded"
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Resource = var.grafana_api_token_secret_arn != null ? var.grafana_api_token_secret_arn : "arn:aws:secretsmanager:${var.aws_region}:*:secret:placeholder-grafana-*"
-      }
-    ]
-  })
-}
-
-#CloudWatch log group
+# CloudWatch log groups
 resource "aws_cloudwatch_log_group" "prediction_lambda_logs" {
   count             = var.enable_prediction ? 1 : 0
   name              = "/aws/lambda/${local.prediction_lambda_name}"
@@ -275,10 +33,10 @@ resource "aws_cloudwatch_log_group" "fallback_lambda_logs" {
 resource "aws_lambda_function" "prediction_lambda" {
   count = var.enable_prediction ? 1 : 0
 
-  filename         = var.prediction_lambda_package_path
-  source_code_hash = filebase64sha256(var.prediction_lambda_package_path)
+  filename         = var.prediction_package_path
+  source_code_hash = filebase64sha256(var.prediction_package_path)
   function_name    = local.prediction_lambda_name
-  role             = aws_iam_role.prediction_lambda_role[0].arn
+  role             = var.prediction_role_arn
   handler          = "index.handler"
   runtime          = "python3.11"
   timeout          = var.prediction_lambda_timeout_seconds
@@ -307,10 +65,10 @@ resource "aws_lambda_function" "prediction_lambda" {
 resource "aws_lambda_function" "serving_adapter_lambda" {
   count = var.enable_prediction ? 1 : 0
 
-  filename         = var.serving_adapter_lambda_package_path
-  source_code_hash = filebase64sha256(var.serving_adapter_lambda_package_path)
+  filename         = var.serving_adapter_package_path
+  source_code_hash = filebase64sha256(var.serving_adapter_package_path)
   function_name    = local.serving_adapter_lambda_name
-  role             = aws_iam_role.serving_adapter_lambda_role[0].arn
+  role             = var.serving_adapter_role_arn
   handler          = "index.handler"
   runtime          = "python3.11"
   timeout          = var.serving_adapter_lambda_timeout_seconds
@@ -336,10 +94,10 @@ resource "aws_lambda_function" "serving_adapter_lambda" {
 resource "aws_lambda_function" "fallback_lambda" {
   count = var.enable_prediction ? 1 : 0
 
-  filename         = var.fallback_lambda_package_path
-  source_code_hash = filebase64sha256(var.fallback_lambda_package_path)
+  filename         = var.fallback_package_path
+  source_code_hash = filebase64sha256(var.fallback_package_path)
   function_name    = local.fallback_lambda_name
-  role             = aws_iam_role.fallback_lambda_role[0].arn
+  role             = var.fallback_role_arn
   handler          = "index.handler"
   runtime          = "python3.11"
   timeout          = var.fallback_lambda_timeout_seconds
@@ -380,7 +138,7 @@ resource "aws_scheduler_schedule" "prediction_schedule" {
 
   target {
     arn      = aws_lambda_function.prediction_lambda[0].arn
-    role_arn = aws_iam_role.scheduler_role[0].arn
+    role_arn = var.scheduler_role_arn
 
     input = jsonencode({
       service_id       = each.value.service_id

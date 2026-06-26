@@ -10,7 +10,7 @@ output "prediction_lambda_arn" {
 
 output "prediction_lambda_role_arn" {
   description = "ARN of the Prediction Lambda IAM role"
-  value       = try(aws_iam_role.prediction_lambda_role[0].arn, null)
+  value       = var.enable_prediction ? var.prediction_role_arn : null
 }
 
 output "serving_adapter_lambda_name" {
@@ -25,7 +25,7 @@ output "serving_adapter_lambda_arn" {
 
 output "serving_adapter_lambda_role_arn" {
   description = "ARN of the Serving Adapter Lambda IAM role"
-  value       = try(aws_iam_role.serving_adapter_lambda_role[0].arn, null)
+  value       = var.enable_prediction ? var.serving_adapter_role_arn : null
 }
 
 output "fallback_lambda_name" {
@@ -40,12 +40,12 @@ output "fallback_lambda_arn" {
 
 output "fallback_lambda_role_arn" {
   description = "ARN of the Fallback Lambda IAM role"
-  value       = try(aws_iam_role.fallback_lambda_role[0].arn, null)
+  value       = var.enable_prediction ? var.fallback_role_arn : null
 }
 
 output "scheduler_role_arn" {
   description = "ARN of the EventBridge Scheduler IAM role"
-  value       = try(aws_iam_role.scheduler_role[0].arn, null)
+  value       = var.enable_prediction ? var.scheduler_role_arn : null
 }
 
 output "prediction_schedule_names" {

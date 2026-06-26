@@ -14,7 +14,7 @@ variable "name_prefix" {
 variable "aws_region" {
   description = "AWS Region"
   type        = string
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 variable "enable_prediction" {
@@ -121,22 +121,43 @@ variable "grafana_api_token_secret_arn" {
 }
 
 # Lambda artifact inputs
-variable "prediction_lambda_package_path" {
+variable "prediction_package_path" {
   description = "Local zip package path for Prediction Lambda placeholder or real code"
   type        = string
   default     = "build/prediction.zip"
 }
 
-variable "serving_adapter_lambda_package_path" {
+variable "serving_adapter_package_path" {
   description = "Local zip package path for Serving Adapter Lambda placeholder or real code"
   type        = string
   default     = "build/serving-adapter.zip"
 }
 
-variable "fallback_lambda_package_path" {
+variable "fallback_package_path" {
   description = "Local zip package path for Fallback Lambda placeholder or real code"
   type        = string
   default     = "build/fallback.zip"
+}
+
+# IAM roles are owned by infra/modules/security_baseline.
+variable "prediction_role_arn" {
+  description = "IAM role ARN for Prediction Lambda from security_baseline."
+  type        = string
+}
+
+variable "serving_adapter_role_arn" {
+  description = "IAM role ARN for Serving Adapter Lambda from security_baseline."
+  type        = string
+}
+
+variable "fallback_role_arn" {
+  description = "IAM role ARN for Fallback Lambda from security_baseline."
+  type        = string
+}
+
+variable "scheduler_role_arn" {
+  description = "IAM role ARN for EventBridge Scheduler from security_baseline."
+  type        = string
 }
 
 # Lambda runtime config

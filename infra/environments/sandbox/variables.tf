@@ -34,23 +34,9 @@ variable "ai_engine_alb_ingress_cidrs" {
 }
 
 variable "enable_prediction" {
-  description = "Enable prediction module"
-variable "telemetry_queue_arn" {
-  description = "Temporary telemetry queue ARN placeholder. Replace with module.telemetry_ingest output after that module is merged."
-  type        = string
-  default     = "arn:aws:sqs:us-east-1:894597652722:cdo08-sandbox-telemetry-queue-placeholder"
-}
-
-variable "telemetry_queue_url" {
-  description = "Temporary telemetry queue URL placeholder. Replace with module.telemetry_ingest output after that module is merged."
-  type        = string
-  default     = "https://sqs.us-east-1.amazonaws.com/894597652722/cdo08-sandbox-telemetry-queue-placeholder"
-}
-
-variable "telemetry_dlq_name" {
-  description = "Temporary telemetry DLQ name placeholder for alarm wiring. Replace with module.telemetry_ingest output after that module is merged."
-  type        = string
-  default     = "cdo08-sandbox-telemetry-dlq-placeholder"
+  description = "Enable Prediction/Scheduler/Fail-open resources. Keep false until Lambda packages and AI endpoint are ready."
+  type        = bool
+  default     = false
 }
 
 variable "enable_writer_event_source_mapping" {
@@ -88,10 +74,12 @@ variable "create_grafana_workspace" {
 }
 
 variable "prediction_service_list" {
-  description = "Services for prediction"
+  description = "Services scheduled for prediction."
   type = list(object({
-    service_id = string
-    tenant_id  = string
+    service_id          = string
+    tenant_id           = string
+    schedule_expression = optional(string, "rate(5 minutes)")
+    enabled             = optional(bool, true)
   }))
   default = [
     { service_id = "payment-api", tenant_id = "tenant-cdo08-demo" },
@@ -99,6 +87,25 @@ variable "prediction_service_list" {
     { service_id = "gateway-api", tenant_id = "tenant-cdo08-demo" },
   ]
 }
+
+variable "prediction_package_path" {
+  description = "Local zip path for Prediction Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/prediction.zip"
+}
+
+variable "serving_adapter_package_path" {
+  description = "Local zip path for Serving Adapter Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/serving-adapter.zip"
+}
+
+variable "fallback_package_path" {
+  description = "Local zip path for Fallback Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/fallback.zip"
+}
+
 variable "writer_batch_size" {
   description = "Telemetry Writer SQS batch size."
   type        = number

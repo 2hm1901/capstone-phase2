@@ -32,24 +32,30 @@ module "prediction" {
   prediction_interval_minutes = 5
   lookback_minutes            = 120
 
-  # From Nam có thể thay đổi tử Nam
-  #amp_workspace_id   = module.telemetry_store.amp_workspace_id
-  #amp_workspace_arn  = module.telemetry_store.amp_workspace_arn
-  #amp_query_endpoint = module.telemetry_store.amp_query_endpoint
+  amp_workspace_id   = module.telemetry_store.amp_workspace_id
+  amp_workspace_arn  = module.telemetry_store.amp_workspace_arn
+  amp_query_endpoint = module.telemetry_store.amp_query_endpoint
 
-  #chạy để test
-  amp_workspace_id   = "ws-placeholder-id"
-  amp_workspace_arn  = "arn:aws:aps:us-west-2:123456789012:workspace/ws-placeholder"
-  amp_query_endpoint = "https://aps-workspaces.us-west-2.amazonaws.com/workspaces/ws-placeholder"
-
-  # From AI Engine module / runtime config
+  # AI Engine runtime is implemented separately. Keep disabled until the endpoint
+  # and Lambda packages are ready.
   ai_engine_endpoint   = null
   ai_engine_invoke_arn = null
 
-  # From Quân audit/Grafana module
-  audit_table_arn              = null
-  audit_table_name             = null
-  grafana_api_token_secret_arn = null
+  audit_table_arn              = module.observability_audit.audit_table_arn
+  audit_table_name             = module.observability_audit.audit_table_name
+  grafana_api_token_secret_arn = module.security_baseline.grafana_secret_arn
+
+  prediction_role_arn          = module.security_baseline.prediction_role_arn
+  serving_adapter_role_arn     = module.security_baseline.prediction_role_arn
+  fallback_role_arn            = module.security_baseline.fallback_role_arn
+  scheduler_role_arn           = module.security_baseline.scheduler_role_arn
+  prediction_package_path      = var.prediction_package_path
+  serving_adapter_package_path = var.serving_adapter_package_path
+  fallback_package_path        = var.fallback_package_path
+
+  tags = local.common_tags
+}
+
 data "archive_file" "ingest_placeholder" {
   type        = "zip"
   source_dir  = "../../packages/ingest_placeholder"
