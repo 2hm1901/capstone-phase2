@@ -35,7 +35,7 @@ tf-plan: tf-init ## Preview sandbox infrastructure changes.
 
 # Áp dụng thay đổi đã được team review vào shared sandbox.
 # Không chạy đồng thời với một Terraform apply khác: S3 lockfile sẽ serialize thao tác.
-tf-apply: tf-init ## Apply reviewed changes to the shared sandbox.
+tf-apply: ## Apply reviewed changes to the shared sandbox.
 	terraform -chdir=$(TF_DIR) apply
 
 # Kiểm tra nhanh trước PR: init, format check và validate. Không thay đổi AWS resource.
