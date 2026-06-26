@@ -31,6 +31,7 @@
 Để đảm bảo tuyệt đối không vượt ngân sách $200/tháng theo yêu cầu của Client:
 - **Cost Alerting**: Cấu hình AWS Budgets gửi cảnh báo khi chi phí đạt 80% ($160).
 - **Circuit Breaker**: Khi chi phí đạt 100% ($200), tự động trigger AWS Lambda để gỡ toàn bộ Auto Scaling Group và ép `Desired_Count = 0` (Scale to Zero) cho ECS Fargate cluster nhằm chặn đứng mọi chi phí phát sinh thêm.
+  - *Thứ tự ưu tiên (có chủ đích):* ràng buộc ngân sách $200 là **hard requirement của Client** nên được ưu tiên **cao hơn** SLA availability 99.5%. Đây là **fail-open**: khi engine scale-to-zero, CDO tự fallback về rule-based alert (xem Failure modes) nên monitoring KHÔNG gián đoạn. Thực tế cost đo ~$36/tháng nên CB gần như không bao giờ kích hoạt — đây là van an toàn cho kịch bản cực đoan, không phải chế độ vận hành thường.
 
 ## Scaling
 
@@ -48,7 +49,7 @@
 
 | Config / Secret | Source | Note |
 |---|---|---|
-| `AWS_REGION` | env var | ap-southeast-1 |
+| `AWS_REGION` | env var | us-east-1 (mặc định; engine region-agnostic, theo region CDO deploy) |
 | `BASELINE_BACKEND` | env var | `s3` (prod) / `local` (dev fallback) |
 | `BASELINE_S3_BUCKET` | env var | bucket chứa per-service baseline JSON |
 | `BASELINE_S3_PREFIX` | env var | mặc định `baselines/` |
@@ -88,6 +89,16 @@ graph TD
 Do tính chất bài toán TF4, kiến trúc triển khai bắt buộc chia làm hai ranh giới. CDO **chỉ chịu trách nhiệm host phần Model Serving** (FastAPI phía trên).
 Quá trình **Model Training** (Học baseline cho từng service) sẽ được thiết kế trên giấy: chạy batch job qua AWS SageMaker hoặc AWS Batch 1 lần/tuần.
 *Ghi chú:* **ADR (Architecture Decision Record)** sẽ định nghĩa chi tiết Logic Trigger tự động (Retrain trigger logic) khi model bị drift theo đúng yêu cầu của Mentor. Nhóm CDO không cần setup hạ tầng training này.
+
+### Baseline lifecycle (Design-only)
+
+Vòng đời của per-service STL baseline (seasonal profile + residual σ). Đây là thiết kế trên giấy, KHÔNG yêu cầu CDO implement:
+
+| Aspect | Configuration |
+|---|---|
+| **Retrain trigger** | (1) Định kỳ Thứ Hai hàng tuần (lấy 7 ngày gần nhất); (2) Drift-triggered khi FP-rate/Brier vượt ngưỡng trong 24h. Chi tiết: `docs/05_adrs.md` ADR-005. |
+| **Registry** | Baseline versioned trên S3 — prefix `{BASELINE_S3_PREFIX}{version}/` (vd `baselines/v2/`); giữ ≥ 2 version gần nhất để rollback. |
+| **Promotion gate** | Baseline mới chỉ được swap vào serving khi **pass holdout gate** (recall ≥ 80%, FP ≤ 12%) đo bằng `tf4-evidence/eval_engine.py` (ADR-004). Promote = trỏ env var `BASELINE_S3_PREFIX`/version sang bản mới; fail gate → giữ bản cũ. |
 
 ## Per-CDO platform pointer
 

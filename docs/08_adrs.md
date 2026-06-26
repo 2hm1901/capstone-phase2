@@ -144,7 +144,7 @@ ADR là log các quyết định kiến trúc có trade-off thật. File này ap
 - **Status:** Accepted
 - **Date:** 2026-06-25
 - **Context:** Deployment Contract sau khi được AI sửa xác nhận mỗi CDO tự host AI Engine trên platform riêng. AI bàn giao artifact/spec, CDO deploy engine và expose endpoint riêng theo contract.
-- **Decision:** CDO08 host AI Engine Runtime bằng ECS Fargate stateless FastAPI, internal ALB/private DNS, port 8080, `/health`, `POST /v1/predict`, IAM SigV4, baseline storage trên S3 mã hóa KMS.
+- **Decision:** CDO08 host AI Engine Runtime bằng ECS Fargate stateless FastAPI, public HTTPS ALB ingress, ECS task trong private subnet, port 8080, `/health`, `POST /v1/predict`, IAM SigV4, baseline storage trên S3 mã hóa KMS.
 - **Consequence:**
   - ✅ Khớp contract và ownership CDO/CDO platform.
   - ✅ Container FastAPI phù hợp ECS Fargate và rollout/rollback bằng ECS task definition/CodeDeploy.
@@ -164,7 +164,7 @@ ADR là log các quyết định kiến trúc có trade-off thật. File này ap
 - **Status:** Accepted
 - **Date:** 2026-06-25
 - **Context:** AI Engine không nên biết chi tiết PromQL/AMP schema, còn dashboard/audit/fallback cần context riêng của CDO08. Request AI phải có `signal_window` ≥120 phút và map đúng `metric_type`.
-- **Decision:** Dùng Prediction Integration Lambda để query AMP, build `signal_window`, gọi `/v1/predict`, xử lý 400/401/429/503, tạo audit và Grafana annotation.
+- **Decision:** Dùng Prediction Integration Lambda để query AMP, build `signal_window`, gọi `/v1/predict`, xử lý 400/401/422/429/503, tạo audit và Grafana annotation.
 - **Consequence:**
   - ✅ Cô lập AI Engine khỏi storage/query detail.
   - ✅ Dễ mock trong W11 và đổi sang engine thật trong W12.
@@ -199,15 +199,15 @@ ADR là log các quyết định kiến trúc có trade-off thật. File này ap
 
 - **Status:** Accepted
 - **Date:** 2026-06-25
-- **Context:** CDO08 cần tra cứu prediction/fallback theo correlation/service nhanh. AI API Contract yêu cầu mỗi AI request có audit log nội bộ với retention 3 năm.
-- **Decision:** Dùng DynamoDB SSE-KMS + TTL làm CDO audit store cho prediction/fallback records; AI Engine ghi audit fields bắt buộc vào CloudWatch Logs log group riêng, KMS encrypted, retention 3 năm.
+- **Context:** CDO08 cần tra cứu prediction/fallback theo correlation/service nhanh. AI API Contract yêu cầu mỗi AI request có audit log nội bộ với retention 1 năm.
+- **Decision:** Dùng DynamoDB SSE-KMS + TTL làm CDO audit store cho prediction/fallback records; AI Engine ghi audit fields bắt buộc vào CloudWatch Logs log group riêng, KMS encrypted, retention 1 năm.
 - **Consequence:**
   - ✅ DynamoDB phù hợp access pattern tra một prediction/correlation.
   - ✅ Tách CDO operational audit khỏi AI Engine internal audit.
   - ✅ TTL hỗ trợ cleanup CDO audit sau retention đã chốt.
-  - ✅ CloudWatch Logs đáp ứng audit retention 3 năm cho AI Engine theo contract.
+  - ✅ CloudWatch Logs đáp ứng audit retention 1 năm cho AI Engine theo contract.
   - ⚠️ DynamoDB không tiện cho báo cáo SQL phức tạp.
-  - ⚠️ CloudWatch retention 3 năm có cost; phải log đúng field, không log raw PII/secret.
+  - ⚠️ CloudWatch retention 1 năm có cost; phải log đúng field, không log raw PII/secret.
 - **Alternatives considered:**
   - Aurora/RDS audit DB: rejected vì always-on cost/connection/backup cao cho capstone.
   - S3-only audit: rẻ nhưng query/correlation lookup và access control nghiệp vụ yếu hơn.

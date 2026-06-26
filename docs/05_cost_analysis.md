@@ -23,7 +23,7 @@ Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo 
 
 | Assumption | Value | Note |
 |---|---:|---|
-| AWS region | `ap-southeast-2` | Region đã cấu hình cho shared sandbox account |
+| AWS region | `us-east-1` | Region đã cấu hình cho shared sandbox account |
 | Services demo | 3 | `payment-api`, `queue-worker`, `gateway-api` |
 | Metrics/service | 7 | Theo Telemetry Contract |
 | Telemetry emit interval | 60s | 1 data point/phút/metric/service |
@@ -109,7 +109,7 @@ Con số này thấp cho capstone. Prediction cost chủ yếu nằm ở Lambda 
 | DynamoDB audit | ~25,920 prediction records/month + fallback records | ~$0–$2 | Writes/storage | TTL, on-demand |
 | S3 baseline storage | Small JSON/CSV baseline files | <$1 | GB-month + requests | Lifecycle if grows |
 | CloudWatch Logs/Alarms | Lambda/ECS logs + alarms | ~$2–$10 | Log volume/retention | Structured logs, 14–30d app retention |
-| AI Engine audit logs | Low volume, retention 3 years | ~$0–$3 initially | Long retention | Log only required audit fields |
+| AI Engine audit logs | Low volume, retention 1 year | ~$0–$3 initially | Long retention | Log only required audit fields |
 | Managed Grafana | 1 workspace/user minimum | ~$9–$30 | Active users/license | Minimal users/service accounts |
 | Secrets Manager/SSM/KMS | Few secrets/keys | ~$1–$5 | Secret/month + KMS requests | Avoid unnecessary secrets |
 | EventBridge Scheduler | ~25,920 invokes/month | ~$0 | Free tier likely covers | 5-min cadence |
@@ -154,7 +154,7 @@ W11/W12 must-have:
 - Prediction interval 5 phút/service; không gọi AI theo từng data point.
 - Lambda reserved/max concurrency cho ingest/prediction.
 - SQS queue retention vừa đủ demo; DLQ có alarm.
-- CloudWatch app log retention 14–30 ngày; AI audit log retention 3 năm theo contract.
+- CloudWatch app log retention 14–30 ngày; AI audit log retention 1 năm theo contract.
 - Không tạo NAT Gateway nếu chưa có quyết định Tech Lead + cost note.
 - Scale-to-zero/circuit breaker cho ECS AI Engine nếu cost vượt ngưỡng nguy hiểm theo Deployment Contract.
 
@@ -216,7 +216,7 @@ Budget >= 100% cap
 
 ## 9. Open questions
 
-- [x] Region/account pricing final là gì? — `ap-southeast-2` trên shared sandbox AWS account.
+- [x] Region/account pricing final là gì? — `us-east-1` trên shared sandbox AWS account.
 - [ ] AI Engine có bắt buộc min 2 tasks 24/7 trong demo không, hay được scale down ngoài test window?
 - [ ] Có cần NAT Gateway để AI Engine đọc S3/CloudWatch/OTel không, hay VPC endpoint/public AWS endpoint đủ?
 - [ ] Managed Grafana pricing/user count thực tế trong account mentor là bao nhiêu?

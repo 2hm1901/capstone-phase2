@@ -36,6 +36,8 @@ AI error/timeout/429/503
 Fallback Lambda → static threshold → Grafana fallback annotation + audit
 ```
 
+Terraform hiện tại đã tạo phần nền tảng network trong `sandbox`: 2 VPC tách biệt cho workload generator và AI Engine, không peering. AI Engine VPC có public subnet cho Application Load Balancer và private subnet cho AI service.
+
 ### Thành phần chính
 
 | Component | Lựa chọn hiện tại | Trách nhiệm |
@@ -67,15 +69,11 @@ Amazon Timestream for LiveAnalytics không được dùng vì AWS account capsto
 │   └── assets/
 ├── contracts/                          # AI-CDO contracts sau khi review/freeze
 ├── infra/                              # Terraform/IaC
+│   ├── bootstrap/                      # Tạo shared S3 state bucket một lần
 │   ├── modules/
-│   │   ├── networking/
-│   │   ├── telemetry/
-│   │   ├── amp/
-│   │   ├── compute/
-│   │   ├── scheduler/
-│   │   ├── observability/
-│   │   └── security/
-│   └── environments/sandbox/
+│   │   └── networking/                 # Module hiện có; module mới thêm qua PR
+│   └── environments/
+│       └── sandbox/                    # Môi trường deployable duy nhất
 ├── src/
 │   ├── generator/
 │   ├── ingest/
@@ -133,36 +131,40 @@ W12 bổ sung `05_cost_analysis.md` với actual cost, `07_test_eval_report.md`,
 
 ## Prerequisites
 
-- AWS account capstone và region đã xác nhận.
+- AWS account capstone `894597652722`, region `us-east-1`.
 - AWS CLI configured với quyền deploy sandbox.
-- Terraform version được pin trong `infra/versions.tf`.
+- Terraform version theo `infra/bootstrap/versions.tf` và `infra/environments/sandbox/versions.tf`.
 - Docker để build generator/Lambda image khi cần.
 - Runtime theo source code đã chọn: Python hoặc Node.js.
 - k6 hoặc tooling tương đương để chạy load scenario.
 
 ## Development workflow
 
-> Lệnh dưới đây là workflow mục tiêu. Chỉ chạy khi `infra/`, `scripts/` và source code đã được tạo.
+Terraform dùng chung một remote state S3 cho `sandbox`. Các lệnh thường dùng đã được gom trong [`Makefile`](Makefile).
 
 ```bash
-# 1. Validate IaC
-terraform -chdir=infra/environments/sandbox init
-terraform -chdir=infra/environments/sandbox fmt -check -recursive
-terraform -chdir=infra/environments/sandbox validate
-terraform -chdir=infra/environments/sandbox plan
+# 1. Kết nối shared Terraform state trên máy local
+make tf-init
 
-# 2. Deploy sandbox sau review plan
-terraform -chdir=infra/environments/sandbox apply
+# 2. Validate IaC trước khi mở PR
+make tf-fmt-check
+make tf-validate
+make tf-plan
 
-# 3. Smoke test platform
+# 3. Apply sandbox chỉ sau khi plan đã được review
+make tf-apply
+
+# 4. Smoke test platform
 ./scripts/smoke-test.sh
 
-# 4. Run một scenario đã versioned
+# 5. Run một scenario đã versioned
 ./scripts/run-scenario.sh queue-worker gradual_drift
 
-# 5. Teardown resource demo khi không dùng
+# 6. Teardown resource demo khi không dùng
 ./scripts/teardown.sh
 ```
+
+Không commit trực tiếp lên `main` cho Terraform implementation. Mỗi Jira task tạo branch riêng, mở PR, attach output `make tf-plan`, review xong mới merge/apply để tránh tạo trùng resources.
 
 ## Test and evidence expectations
 
