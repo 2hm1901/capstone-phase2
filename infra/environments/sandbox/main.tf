@@ -21,6 +21,35 @@ module "networking" {
   tags                        = local.common_tags
 }
 
+module "telemetry_store" {
+  source = "../../modules/telemetry_store"
+
+  name_prefix         = local.name_prefix
+  environment         = "sandbox"
+  amp_workspace_alias = "${local.name_prefix}-amp"
+
+  # TODO: replace these placeholder variables with module.telemetry_ingest
+  # outputs after Phuong's telemetry ingest module is merged. This module does
+  # not create a duplicate telemetry SQS queue or DLQ.
+  telemetry_queue_arn = var.telemetry_queue_arn
+  telemetry_queue_url = var.telemetry_queue_url
+  telemetry_dlq_name  = var.telemetry_dlq_name
+
+  enable_writer_event_source_mapping = var.enable_writer_event_source_mapping
+
+  writer_source_dir                     = "${path.module}/../../../src/writer"
+  batch_size                            = var.writer_batch_size
+  maximum_batching_window_in_seconds    = var.writer_maximum_batching_window_seconds
+  writer_timeout_seconds                = var.writer_timeout_seconds
+  writer_memory_size                    = var.writer_memory_size
+  writer_reserved_concurrency           = var.writer_reserved_concurrency
+  log_retention_days                    = var.writer_log_retention_days
+  writer_duration_alarm_threshold_ms    = 25000
+  sqs_queue_age_alarm_threshold_seconds = 300
+
+  tags = local.common_tags
+}
+
 output "workload_vpc_id" {
   description = "ID of the synthetic workload/services VPC."
   value       = module.networking.workload_vpc_id
@@ -71,6 +100,50 @@ output "ai_engine_internet_gateway_id" {
   value       = module.networking.ai_engine_internet_gateway_id
 }
 
+output "amp_workspace_id" {
+  description = "AMP workspace ID for the primary telemetry store."
+  value       = module.telemetry_store.amp_workspace_id
+}
+
+output "amp_workspace_arn" {
+  description = "AMP workspace ARN for IAM scoping."
+  value       = module.telemetry_store.amp_workspace_arn
+}
+
+output "amp_workspace_alias" {
+  description = "AMP workspace alias."
+  value       = module.telemetry_store.amp_workspace_alias
+}
+
+output "amp_remote_write_endpoint" {
+  description = "AMP remote-write endpoint for Telemetry Writer."
+  value       = module.telemetry_store.amp_remote_write_endpoint
+}
+
+output "amp_query_endpoint" {
+  description = "AMP query endpoint for Prediction Lambda and Grafana."
+  value       = module.telemetry_store.amp_query_endpoint
+}
+
+output "writer_lambda_name" {
+  description = "Telemetry Writer Lambda function name."
+  value       = module.telemetry_store.writer_lambda_name
+}
+
+output "writer_lambda_arn" {
+  description = "Telemetry Writer Lambda function ARN."
+  value       = module.telemetry_store.writer_lambda_arn
+}
+
+output "telemetry_writer_role_arn" {
+  description = "Telemetry Writer IAM role ARN."
+  value       = module.telemetry_store.writer_role_arn
+}
+
+output "writer_log_group_name" {
+  description = "Telemetry Writer CloudWatch log group name."
+  value       = module.telemetry_store.writer_log_group_name
+}
 module "observability_audit" {
   source = "../../modules/observability_audit"
 
