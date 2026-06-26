@@ -32,3 +32,53 @@ variable "ai_engine_alb_ingress_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+# ---------------------------------------------------------------------------
+# Synthetic Generator variables (Owner: Thuy)
+# ---------------------------------------------------------------------------
+
+variable "generator_image_uri" {
+  description = "Full ECR URI for the synthetic generator image. Leave empty until image is built."
+  type        = string
+  default     = ""
+}
+
+variable "generator_tenant_id" {
+  description = "Tenant ID injected into every synthetic telemetry event."
+  type        = string
+  default     = "tenant-cdo08-demo"
+}
+
+variable "generator_service_list" {
+  description = "Comma-separated list of service_id values the generator emits for."
+  type        = string
+  default     = "payment-api,queue-worker,gateway-api"
+}
+
+variable "generator_scenario_list" {
+  description = "Comma-separated list of test scenarios."
+  type        = string
+  default     = "gradual_drift,sudden_spike,slow_leak,noisy_baseline"
+}
+
+variable "generator_emit_interval_seconds" {
+  description = "Interval in seconds between telemetry emits per service/metric."
+  type        = number
+  default     = 60
+}
+
+variable "ingest_api_endpoint" {
+  description = <<-EOT
+    HTTPS endpoint for telemetry ingest.
+    Placeholder until module.telemetry_ingest (Phuong) is merged.
+    Once merged, wire module.telemetry_ingest.ingest_api_url here.
+  EOT
+  type        = string
+  default     = "https://PLACEHOLDER.execute-api.us-west-2.amazonaws.com/v1/ingest"
+}
+
+variable "generator_log_retention_days" {
+  description = "CloudWatch log retention in days for generator task logs."
+  type        = number
+  default     = 14
+}
