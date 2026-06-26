@@ -81,3 +81,9 @@ variable "api_throttling_rate_limit" {
   type        = number
   default     = 1000
 }
+
+variable "ingest_reserved_concurrency" {
+  description = "Reserved concurrency for Lambda Ingest to protect account concurrency. Use -1 for unreserved."
+  type        = number
+  default     = 10
+}

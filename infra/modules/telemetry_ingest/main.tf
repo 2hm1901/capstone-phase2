@@ -121,8 +121,9 @@ resource "aws_lambda_function" "ingest" {
   filename         = var.lambda_package_path
   source_code_hash = filebase64sha256(var.lambda_package_path)
 
-  timeout     = var.lambda_timeout
-  memory_size = var.lambda_memory
+  timeout                        = var.lambda_timeout
+  memory_size                    = var.lambda_memory
+  reserved_concurrent_executions = var.ingest_reserved_concurrency
 
   environment {
     variables = {

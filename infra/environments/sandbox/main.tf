@@ -71,6 +71,11 @@ output "ai_engine_internet_gateway_id" {
   value       = module.networking.ai_engine_internet_gateway_id
 }
 
+data "archive_file" "ingest_placeholder" {
+  type        = "zip"
+  source_dir  = "../../packages/ingest_placeholder"
+  output_path = "../../packages/ingest_placeholder.zip"
+}
 
 module "telemetry_ingest" {
   source = "../../modules/telemetry_ingest"
@@ -78,14 +83,15 @@ module "telemetry_ingest" {
   name_prefix         = local.name_prefix
   api_stage           = "sandbox"
   auth_mode           = "IAM"
-  lambda_package_path = "../../packages/ingest_placeholder.zip"
+  lambda_package_path = data.archive_file.ingest_placeholder.output_path
 
-  lambda_timeout             = 10
-  lambda_memory              = 256
-  queue_retention_seconds    = 345600
-  visibility_timeout_seconds = 60
-  max_receive_count          = 5
-  log_retention_days         = 14
+  lambda_timeout              = 10
+  lambda_memory               = 256
+  ingest_reserved_concurrency = 10
+  queue_retention_seconds     = 345600
+  visibility_timeout_seconds  = 60
+  max_receive_count           = 5
+  log_retention_days          = 14
 
   api_throttling_burst_limit = 1000
   api_throttling_rate_limit  = 1000
