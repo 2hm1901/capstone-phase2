@@ -49,7 +49,7 @@
 
 | Config / Secret | Source | Note |
 |---|---|---|
-| `AWS_REGION` | env var | ap-southeast-1 |
+| `AWS_REGION` | env var | us-east-1 (mặc định; engine region-agnostic, theo region CDO deploy) |
 | `BASELINE_BACKEND` | env var | `s3` (prod) / `local` (dev fallback) |
 | `BASELINE_S3_BUCKET` | env var | bucket chứa per-service baseline JSON |
 | `BASELINE_S3_PREFIX` | env var | mặc định `baselines/` |

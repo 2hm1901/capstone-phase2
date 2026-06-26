@@ -24,7 +24,7 @@
   "service_id": "fraud-detection",
   "metric_type": "cache_hit_rate_pct",
   "value": 45.5,
-  "labels": {"cache_type": "redis", "region": "ap-southeast-1"}
+  "labels": {"cache_type": "redis", "region": "us-east-1"}
 }
 ```
 
@@ -64,7 +64,7 @@
   "service_id": "payment-gateway",
   "metric_type": "cpu_usage_percent",
   "value": 85.5,
-  "labels": {"region": "ap-southeast-1"}
+  "labels": {"region": "us-east-1"}
 }
 ```
 
@@ -92,7 +92,7 @@
   "service_id": "payment-gateway",
   "metric_type": "memory_usage_percent",
   "value": 72.1,
-  "labels": {"region": "ap-southeast-1"}
+  "labels": {"region": "us-east-1"}
 }
 ```
 
@@ -120,7 +120,7 @@
   "service_id": "payment-gateway",
   "metric_type": "active_connections",
   "value": 4500.0,
-  "labels": {"region": "ap-southeast-1"}
+  "labels": {"region": "us-east-1"}
 }
 ```
 
@@ -148,7 +148,7 @@
   "service_id": "payment-gateway",
   "metric_type": "db_connection_pool_pct",
   "value": 95.0,
-  "labels": {"db_type": "postgres", "region": "ap-southeast-1"}
+  "labels": {"db_type": "postgres", "region": "us-east-1"}
 }
 ```
 
@@ -176,7 +176,7 @@
   "service_id": "ledger-service",
   "metric_type": "queue_depth",
   "value": 15000.0,
-  "labels": {"queue_name": "ledger-events-sqs", "region": "ap-southeast-1"}
+  "labels": {"queue_name": "ledger-events-sqs", "region": "us-east-1"}
 }
 ```
 
@@ -204,7 +204,7 @@
   "service_id": "fraud-detection",
   "metric_type": "cache_hit_rate_pct",
   "value": 45.5,
-  "labels": {"cache_type": "redis", "region": "ap-southeast-1"}
+  "labels": {"cache_type": "redis", "region": "us-east-1"}
 }
 ```
 
@@ -235,7 +235,7 @@
   "service_id": "payment-gateway",
   "metric_type": "api_latency_ms",
   "value": 450.5,
-  "labels": {"region": "ap-southeast-1"}
+  "labels": {"region": "us-east-1"}
 }
 ```
 

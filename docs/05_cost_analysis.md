@@ -23,7 +23,7 @@ Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo 
 
 | Assumption | Value | Note |
 |---|---:|---|
-| AWS region | `ap-southeast-1` | Region đã cấu hình cho shared sandbox account |
+| AWS region | `us-east-1` | Region đã cấu hình cho shared sandbox account |
 | Services demo | 3 | `payment-api`, `queue-worker`, `gateway-api` |
 | Metrics/service | 7 | Theo Telemetry Contract |
 | Telemetry emit interval | 60s | 1 data point/phút/metric/service |
@@ -216,7 +216,7 @@ Budget >= 100% cap
 
 ## 9. Open questions
 
-- [x] Region/account pricing final là gì? — `ap-southeast-1` trên shared sandbox AWS account.
+- [x] Region/account pricing final là gì? — `us-east-1` trên shared sandbox AWS account.
 - [ ] AI Engine có bắt buộc min 2 tasks 24/7 trong demo không, hay được scale down ngoài test window?
 - [ ] Có cần NAT Gateway để AI Engine đọc S3/CloudWatch/OTel không, hay VPC endpoint/public AWS endpoint đủ?
 - [ ] Managed Grafana pricing/user count thực tế trong account mentor là bao nhiêu?
