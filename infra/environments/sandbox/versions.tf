@@ -2,9 +2,9 @@ terraform {
   required_version = ">= 1.10.0, < 2.0.0"
 
   backend "s3" {
-    bucket       = "cdo08-tf-state-894597652722-us-west-2"
+    bucket       = "cdo08-tf-state-894597652722-us-east-1"
     key          = "cdo08/sandbox/terraform.tfstate"
-    region       = "us-west-2"
+    region       = "us-east-1"
     encrypt      = true
     use_lockfile = true
   }
@@ -13,6 +13,11 @@ terraform {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
+    }
+
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
     }
   }
 }
