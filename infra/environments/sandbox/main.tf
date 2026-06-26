@@ -70,3 +70,74 @@ output "ai_engine_internet_gateway_id" {
   description = "Internet Gateway ID for the AI Engine VPC public ALB path."
   value       = module.networking.ai_engine_internet_gateway_id
 }
+
+module "observability_audit" {
+  source = "../../modules/observability_audit"
+
+  name_prefix = local.name_prefix
+  aws_region  = var.aws_region
+  tags        = local.common_tags
+
+  audit_table_name     = var.audit_table_name
+  audit_retention_days = var.audit_retention_days
+  audit_ttl_enabled    = var.audit_ttl_enabled
+  audit_kms_key_arn    = var.audit_kms_key_arn
+
+  create_grafana_workspace = var.create_grafana_workspace
+  grafana_workspace_id     = var.grafana_workspace_id
+  grafana_workspace_name   = var.grafana_workspace_name
+  grafana_datasource_uid   = var.grafana_datasource_uid
+  amp_workspace_id         = var.amp_workspace_id
+  grafana_secret_name      = var.grafana_secret_name
+
+  alarm_audit_write_error_threshold  = var.alarm_audit_write_error_threshold
+  alarm_annotation_error_period_secs = var.alarm_annotation_error_period_secs
+  alarm_annotation_error_threshold   = var.alarm_annotation_error_threshold
+  alarm_fallback_count_threshold     = var.alarm_fallback_count_threshold
+  alarm_fallback_count_period_secs   = var.alarm_fallback_count_period_secs
+}
+
+output "audit_table_name" {
+  description = "Name of the DynamoDB audit table."
+  value       = module.observability_audit.audit_table_name
+}
+
+output "audit_table_arn" {
+  description = "ARN of the DynamoDB audit table."
+  value       = module.observability_audit.audit_table_arn
+}
+
+output "audit_writer_role_arn" {
+  description = "IAM role ARN for audit writers (Prediction/Fallback Lambda). PutItem only."
+  value       = module.observability_audit.audit_writer_role_arn
+}
+
+output "audit_reader_role_arn" {
+  description = "IAM role ARN for audit readers (Mentor/debug). Query + GetItem only."
+  value       = module.observability_audit.audit_reader_role_arn
+}
+
+output "grafana_workspace_id" {
+  description = "Amazon Managed Grafana workspace ID (created or referenced). Null when Grafana is deferred."
+  value       = module.observability_audit.grafana_workspace_id
+}
+
+output "grafana_secret_arn" {
+  description = "Secrets Manager secret ARN holding the Grafana service-account token."
+  value       = module.observability_audit.grafana_secret_arn
+}
+
+output "annotation_audit_log_group_name" {
+  description = "CloudWatch Logs log group for annotation/audit structured logs."
+  value       = module.observability_audit.annotation_audit_log_group_name
+}
+
+output "observability_alarm_names" {
+  description = "Map of CloudWatch alarm names owned by the observability_audit module."
+  value       = module.observability_audit.alarm_names
+}
+
+output "observability_dashboard_name" {
+  description = "CloudWatch dashboard name summarizing audit/annotation/fallback health."
+  value       = module.observability_audit.dashboard_name
+}
