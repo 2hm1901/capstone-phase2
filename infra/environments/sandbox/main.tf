@@ -21,6 +21,39 @@ module "networking" {
   tags                        = local.common_tags
 }
 
+module "prediction" {
+  source = "../../modules/prediction"
+
+  name_prefix       = local.name_prefix
+  aws_region        = var.aws_region
+  enable_prediction = var.enable_prediction
+
+  service_list                = var.prediction_service_list
+  prediction_interval_minutes = 5
+  lookback_minutes            = 120
+
+  # From Nam có thể thay đổi tử Nam
+  #amp_workspace_id   = module.telemetry_store.amp_workspace_id
+  #amp_workspace_arn  = module.telemetry_store.amp_workspace_arn
+  #amp_query_endpoint = module.telemetry_store.amp_query_endpoint
+
+  #chạy để test
+  amp_workspace_id   = "ws-placeholder-id"
+  amp_workspace_arn  = "arn:aws:aps:us-west-2:123456789012:workspace/ws-placeholder"
+  amp_query_endpoint = "https://aps-workspaces.us-west-2.amazonaws.com/workspaces/ws-placeholder"
+
+  # From AI Engine module / runtime config
+  ai_engine_endpoint   = null
+  ai_engine_invoke_arn = null
+
+  # From Quân audit/Grafana module
+  audit_table_arn              = null
+  audit_table_name             = null
+  grafana_api_token_secret_arn = null
+
+  tags = local.common_tags
+}
+
 output "workload_vpc_id" {
   description = "ID of the synthetic workload/services VPC."
   value       = module.networking.workload_vpc_id

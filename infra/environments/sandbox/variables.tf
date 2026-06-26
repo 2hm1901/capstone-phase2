@@ -32,3 +32,22 @@ variable "ai_engine_alb_ingress_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "enable_prediction" {
+  description = "Enable prediction module"
+  type        = bool
+  default     = false
+}
+
+variable "prediction_service_list" {
+  description = "Services for prediction"
+  type = list(object({
+    service_id = string
+    tenant_id  = string
+  }))
+  default = [
+    { service_id = "payment-api", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "queue-worker", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "gateway-api", tenant_id = "tenant-cdo08-demo" },
+  ]
+}
