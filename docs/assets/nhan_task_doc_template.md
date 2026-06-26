@@ -1,209 +1,207 @@
-# Giải thích template `nhan_task_doc_template.md`
+# [TF4][W11] Nhân - AI Integration Adapter + Fail-open + Scheduler Security
 
-File này giải thích cách điền đầy đủ từng mục trong template task của Nhân cho AI Integration Adapter, Fail-open và Scheduler Security. Nội dung được thiết kế để PM/TL đọc hiểu requirement, design hiện tại, lựa chọn thay thế, recommendation, security, observability/evidence và cost impact.
+**Người phụ trách:** Nhân
+**Ngày:** `2026-06-26`
+**Loại task:** `Both`
+**Status:** `Final`
 
 ---
 
 ## 1. Executive summary
 
-Mục đích của section này là tóm tắt nhanh: việc này giải quyết vấn đề gì, tại sao chọn thiết kế này, và những điều chính cần biết.
+Nhân chịu trách nhiệm thiết kế và triển khai phần AI Integration Adapter với trigger từ EventBridge Scheduler, đồng thời bổ sung cơ chế fail-open khi AI không phục vụ. Mục tiêu là giữ lead time ≥15 phút bằng prediction định kỳ, tránh gọi AI theo từng datapoint, và bảo đảm fallback tạm thời với static threshold khi AI timeout/429/503/exhausted retry.
 
-Nên trả lời:
-- Component này làm gì: EventBridge Scheduler trigger Prediction Lambda.
-- Tại sao không gọi AI theo từng data point: vì phải bảo đảm lead time, giảm tải AI và tránh gọi theo cadence high-frequency.
-- Cách xử lý lỗi: 400/401/429/503 được phân loại rõ, chỉ retry trên lỗi tạm thời, và fail-open static threshold khi AI không phục vụ.
-- Fallback: khi AI down hoặc quá tải, dùng static threshold để vẫn giữ hành vi an toàn.
-- Security input chính: IAM role cho Scheduler và Lambda, SigV4, idempotency key, không có Scheduler DLQ, tránh duplicate annotation.
+- EventBridge Scheduler chỉ trigger Prediction Lambda, không quyết định telemetry data point interval.
+- Prediction Lambda query AMP với window ≥120 phút và build `signal_window` để gọi `/v1/predict`.
+- Các lỗi 400/401/429/503 được phân loại: 400/401 dừng, 429/503 retry/backoff, timeout/xử lý thành fail-open nếu cần.
+- Fail-open sử dụng static threshold khi AI timeout/429/503/exhausted retry để vẫn đưa ra quyết định an toàn.
+- Security input gồm Scheduler role, Prediction/Fallback IAM, SigV4, idempotency key, không dùng Scheduler DLQ và ngăn duplicate annotation.
 
 ---
 
 ## 2. Requirement từ đề bài / contract
 
-Section này ghi rõ các nguồn requirement và mapping vào thiết kế.
+| Nguồn yêu cầu | Nội dung liên quan | Ý nghĩa thực tế |
+|---|---|---|
+| TF4 learner brief | Lead time ≥15 phút; fail-open khi AI down | Prediction phải định kỳ và có fallback |
+| AI API Contract | `POST /v1/predict`, window ≥120 phút, 400/401/429/503 | Adapter phải build payload và xử lý lỗi đúng |
+| Deployment Contract | AI Engine CDO08 host, SigV4, rate limit | Gọi endpoint nội bộ an toàn và tuân thủ auth |
+| CDO08 docs 02 | EventBridge Scheduler mỗi 5 phút; Prediction Lambda; Fallback Lambda | Validate lựa chọn kiến trúc |
+| CDO08 docs 03 | IAM boundary, idempotency, no Scheduler DLQ | Security input và triển khai monitoring |
 
-Ví dụ:
-- TF4 learner brief: lead time ≥15 phút và fail-open khi AI down => cần prediction theo lịch và fallback tách biệt.
-- AI API Contract: `POST /v1/predict` với window ≥120 phút, build `signal_window` đúng định dạng, xử lý 400/401/429/503.
-- Deployment Contract: AI Engine internal `CDO08` host, SigV4 auth, rate limit và network security.
-- CDO08 docs 02: EventBridge Scheduler mỗi 5 phút; Prediction Lambda; Fallback Lambda.
-- CDO08 docs 03: IAM least privilege, idempotency key, no Scheduler DLQ, no duplicate annotation.
-
-Nên nêu rõ: EventBridge Scheduler chỉ trigger prediction, không ra quyết định telemetry data point interval. Scheduler chỉ định kỳ gọi prediction, interval telemetry vẫn được quyết định bởi AMP/telemetry pipeline và business cadence.
+> Lưu ý: EventBridge Scheduler chỉ trigger prediction, không quyết định telemetry data point interval. Interval của telemetry data point vẫn do hệ thống ingest/AMP quy định, còn Scheduler chỉ đảm bảo prediction diễn ra theo cadence định nghĩa.
 
 ---
 
 ## 3. Component/security input này là gì?
 
-Section này giải thích component cụ thể trong flow và phân biệt rõ trách nhiệm.
-
 ### 3.1 Nó nằm ở đâu trong flow?
-
-Sơ đồ dòng đơn giản:
 
 ```text
 EventBridge Scheduler
   -> Prediction Lambda
-      -> query AMP window ≥120 phút
-      -> build signal_window
+      -> Query AMP window ≥120 phút
+      -> Build signal_window
       -> POST /v1/predict
-      -> handle AI response / errors
-      -> DynamoDB audit + Grafana annotation
-      -> if needed call Fallback Lambda
+      -> Handle AI response/error
+      -> Write audit + Grafana annotation
+      -> If needed -> Fallback Lambda
 ```
 
 ### 3.2 Nó chịu trách nhiệm gì?
 
-- Trigger prediction theo lịch định sẵn.
-- Query AMP với window >= 120 phút, không quyết định telemetry interval.
-- Build payload `signal_window` hợp lệ.
-- Gọi `/v1/predict` và xử lý lỗi 400/401/429/503.
-- Dùng fail-open static threshold khi AI timeout/429/503/exhausted retry.
-- Ghi audit, annotation, và bảo đảm idempotency.
+- Trigger prediction định kỳ theo EventBridge Scheduler.
+- Query AMP với `window >= 120 phút` và không lấy dữ liệu theo từng điểm telemetry.
+- Build đúng payload `signal_window` theo contract để gửi `/v1/predict`.
+- Gọi AI Engine nội bộ bằng SigV4.
+- Xử lý lỗi 400/401/429/503/trường hợp timeout.
+- Kích hoạt fail-open static threshold khi AI timeout/429/503/exhausted retry.
+- Ghi audit, annotation, đảm bảo idempotency và không duplicate.
 
 ### 3.3 Nó không chịu trách nhiệm gì?
 
-- Không quyết định telemetry data point interval.
-- Không trực tiếp điều khiển ingest hoặc alerting.
-- Không dùng để train model.
-- Không duplicate annotation khi scheduler invoke trùng.
+- Không quyết định hoặc thay đổi interval của các điểm telemetry.
+- Không thực hiện training model.
+- Không thực hiện auto-remediation hoặc sửa đổi dữ liệu ingest.
+- Không ghi duplicate annotation nếu Scheduler invoke trùng.
 
 ---
 
 ## 4. Current CDO08 design
 
-Section này trình bày thiết kế hiện tại đã chọn và lý do.
+| Item | Current design |
+|---|---|
+| AWS service/pattern đang chọn | EventBridge Scheduler + Prediction Lambda + Fallback Lambda |
+| Lý do chính | Tách rõ trigger prediction khỏi ingest, giảm số lần gọi AI, dễ kiểm soát retry/fallback |
+| Input | Schedule payload, AMP query window ≥120 phút |
+| Output | AI/fallback result, audit record, Grafana annotation |
+| Runtime | Lambda + EventBridge |
+| Security boundary | Scheduler role chỉ invoke Prediction; Prediction role hạn chế read AMP / call AI / write audit |
+| Observability | AI latency/error, fallback rate, scheduler invoke failure |
+| Cost driver | Cadence 5 phút, AMP query, Lambda invocations |
 
-- AWS service/pattern: EventBridge Scheduler + Prediction Lambda + Fallback Lambda.
-- Lý do: tách prediction cadence khỏi telemetry ingest, đơn giản hoá retry/fallback, giữ security boundary rõ.
-- Input: schedule payload, AMP query window ≥120 phút.
-- Output: AI/fallback result, audit record, Grafana annotation.
-- Security boundary: Scheduler role chỉ invoke Prediction; Prediction role giới hạn AMP query, AI call, audit write; Fallback role cũng giới hạn.
-- Observability: metrics cho latency, error, fallback, scheduler invoke.
-- Cost driver: cadence 5 phút, AMP query, Lambda invocation.
+### Chi tiết hành vi
 
-Phần giải thích nên nhắc:
-- Prediction Lambda query AMP window ≥120 phút và build `signal_window`.
-- `signal_window` phải là dữ liệu input cho `/v1/predict`.
-- `POST /v1/predict` là điểm gọi AI chính, dùng SigV4.
-- Xử lý lỗi:
-  - 400: bad request, không retry, log audit.
-  - 401: auth issue, không retry, security investigation.
-  - 429/503: retry theo backoff, nếu vẫn fail thì activate fail-open static threshold.
-  - timeout: cũng coi là dependency failure và fallback.
+- Prediction Lambda query AMP với `window >= 120 phút` để tạo `signal_window` tối thiểu, đúng yêu cầu API.
+- Lambda xây payload và gọi `POST /v1/predict`.
+- Nếu AI trả về 200, ghi kết quả và annotation.
+- Nếu AI trả về 400: dừng và ghi audit; không retry.
+- Nếu AI trả về 401: dừng, báo security/auth issue; không retry.
+- Nếu AI trả về 429/503 hoặc timeout: retry với backoff, nếu hết retry thì kích hoạt fail-open static threshold.
+- Fail-open static threshold không phải decision AI trong normal path, mà là cơ chế an toàn khi dependency AI không phục vụ.
 
 ---
 
 ## 5. Options considered
 
-So sánh ngắn với các phương án khác và vì sao current design phù hợp.
-
 | Option | Điểm mạnh | Điểm yếu / rủi ro | Khi nào phù hợp | Fit với CDO08 |
 |---|---|---|---|---|
-| Current: Scheduler + Lambda adapter/fallback | Simple, bounded, rõ ràng, dễ observe | Cold start, cần manage concurrent Lambda | Scope dự án hiện tại | High |
-| SQS-trigger prediction | Có thể buffer và dễ retry | Gây latency, dễ tạo nhiều AI calls, phức tạp duplicate | Khi cần queue-based resilience lớn | Low |
-| ECS integration service | Giữ connection pool, có thể xử lý high throughput | Fixed cost, deploy overhead | Khi số lượng prediction lớn liên tục | Medium |
-| Step Functions | Workflow rõ, audit từng bước | Complex, cost cao, latency tăng | Khi có nhiều step approval / orchestration | Low |
+| Scheduler + Lambda adapter/fallback | Simple, bounded, dễ vận hành, phù hợp cadence định kỳ | Cold start, cần quản lý concurrency/retry | Thiết kế theo lịch định sẵn, low-to-medium throughput | High |
+| SQS-trigger prediction | Hỗ trợ buffer và retry tự động | Có thể tạo nhiều AI calls, duplicate, khó giới hạn cadence | Khi cần xử lý event-driven, bursty input | Low |
+| ECS integration service | Connection reuse, ổn định cho high throughput | Fixed cost, deployment phức tạp | Khi prediction liên tục và QPS cao | Medium |
+| Step Functions | Workflow rõ ràng, trace từng bước | Cost/latency lớn, overkill cho path đơn giản | Khi cần orchestration nhiều bước hoặc approval | Low |
 
-Giải thích thêm:
-- SQS-trigger prediction có thể phù hợp nếu muốn buffer request từ nhiều nguồn, nhưng không cần trong thiết kế scheduler định kỳ.
-- ECS integration service phù hợp khi AI endpoint cần kết nối lâu dài hoặc cần high QPS; hiện tại prediction theo lịch 5 phút nên Lambda đủ.
-- Step Functions phù hợp khi cần orchestration phức tạp, nhưng cho workflow đơn giản này sẽ gây chi phí và latency không cần thiết.
+### So sánh ngắn
+
+- SQS-trigger prediction phù hợp nếu cần xử lý queue lớn, nhưng không phù hợp với requirement prediction định kỳ mỗi 5 phút.
+- ECS integration service phù hợp cho integration liên tục hoặc AI endpoint cần giữ kết nối, nhưng current scope dùng Lambda đủ và tiết kiệm hơn.
+- Step Functions phù hợp cho workflow phức tạp, nhưng thiết kế hiện tại chỉ cần trigger + prediction + fallback nên thêm Step Functions sẽ tăng chi phí/độ phức tạp không cần thiết.
 
 ---
 
 ## 6. Recommendation
 
-Section này nêu rõ lựa chọn chính và lý do. Dùng ngôn ngữ đủ để PM/TL hiểu và merge.
+### 6.1 Quyết định cuối
 
-Recommendation tiêu biểu:
+- [x] Giữ current design.
+- [ ] Giữ current design nhưng cần POC trước khi lock.
+- [ ] Thay bằng option khác.
+- [ ] Bỏ component riêng, thay bằng pattern khác.
 
-> Giữ current design EventBridge Scheduler + Prediction Lambda + Fallback Lambda vì nó tối ưu cho reliability, security và cost trong scope CDO08.
+**Recommendation:**
 
-Lý do:
-- Reliability: bounded retry, fail-open static threshold khi AI timeout/429/503/exhausted retry.
-- Security: SigV4 internal call, IAM least privilege, idempotency key, no Scheduler DLQ.
-- Cost: prediction every 5 phút thay vì gọi AI theo mỗi telemetry point.
-- Delivery timeline: có thể triển khai nhanh W11 mock, W12 chuyển sang real engine.
-- Evidence: test AI success, AI 503 fallback, duplicate invoke/idempotency, fallback annotation/audit.
+> CDO08 nên giữ EventBridge Scheduler + Prediction Lambda + Fallback Lambda vì nó cung cấp một thiết kế đơn giản, an toàn và phù hợp với yêu cầu định kỳ, đồng thời tránh gọi AI theo từng data point.
 
-Condition/assumption:
-- EventBridge Scheduler không dùng DLQ, nên cần CloudWatch alarm và monitoring scheduler invoke failure.
-- Fallback threshold config cần người quản lý và version.
-- Duplicate scheduler invokes có thể xảy ra; idempotency key và audit logic bắt buộc.
+### 6.2 Lý do quyết định
+
+- **Reliability:** cadence định kỳ + bounded retry + fail-open static threshold khi AI timeout/429/503/exhausted retry.
+- **Security:** SigV4 nội bộ, IAM least privilege, idempotency key, no Scheduler DLQ.
+- **Cost:** giữ cadence 5 phút, không gọi AI cho từng điểm telemetry, chỉ query AMP window lớn.
+- **Delivery timeline:** có thể triển khai mock W11 và kiểm chứng W12 với real engine.
+- **Evidence:** test AI success, AI 503 fallback, duplicate invoke/idempotency, fallback annotation/audit.
+
+### 6.3 Điều kiện / assumption
+
+- EventBridge Scheduler không dùng DLQ riêng; cần CloudWatch alarm / alert cho scheduler invoke failure.
+- Fallback static threshold phải có config owner/version và review kỹ.
+- Hệ thống phải hỗ trợ idempotency để tránh duplicate annotation bởi duplicate scheduler invoke.
 
 ---
 
 ## 7. Security considerations
 
-Section này liệt rõ security input và risk mitigation.
-
-| Security area | Yêu cầu / quyết định |
+| Security area | Decision / requirement |
 |---|---|
-| IAM least privilege | Scheduler role chỉ invoke Prediction Lambda; Prediction/Fallback role chỉ thực hiện AMP query, AI call, audit write |
-| Scheduler role | chỉ có quyền `events:InvokeFunction` với target Prediction Lambda |
-| Prediction/Fallback IAM | không cho phép update dữ liệu không cần thiết, chỉ read AMP, write audit, invoke fallback nếu cần |
-| Network | Prediction Lambda gọi internal AI endpoint, không public internet |
-| SigV4 | mọi request tới `/v1/predict` phải dùng SigV4 để đảm bảo auth và integrity |
-| Idempotency | mỗi scheduler invoke phải dùng idempotency key để tránh duplicate annotation và duplicate audit |
-| No Scheduler DLQ | không tạo DLQ riêng cho Scheduler; dùng CloudWatch alarm/alert thay vì silent retries |
-| No duplicate annotation | logic annotation audit phải kiểm tra idempotency và chỉ ghi một lần cho cùng prediction lần gọi |
-| Secret handling | Grafana/annotation token lưu ở Secrets Manager; không log secrets |
+| IAM least privilege | Scheduler role chỉ có quyền invoke Prediction Lambda; Prediction/Fallback IAM role chỉ read AMP, call AI, write audit, invoke fallback khi valid |
+| Scheduler role | Giới hạn trên EventBridge target, không có quyền truy cập AMP hoặc DynamoDB khác |
+| Prediction/Fallback IAM | Hạn chế quyền, không có quyền ghi ngoại trừ audit, không có quyền chỉnh cấu hình AI |
+| Network exposure | Prediction Lambda gọi internal AI endpoint; không open public internet |
+| SigV4 | Bắt buộc dùng SigV4 với `/v1/predict` để bảo đảm auth và integrity |
+| Idempotency | Dùng idempotency key cho mỗi scheduler invoke để tránh duplicate annotation/audit |
+| No Scheduler DLQ | Không dùng DLQ riêng cho Scheduler; dùng CloudWatch alarm/alert thay vì retry mù |
+| No duplicate annotation | Logic ghi annotation phải kiểm tra idempotency/audit key và chỉ ghi một lần cho cùng request |
+| Secret handling | Grafana token, AI secrets lưu trong Secrets Manager; không log secret thông tin |
 
-Negative tests / security evidence:
-- AI 503 fallback phải ghi audit và annotation rõ lý do.
-- Duplicate scheduler invoke không tạo duplicate annotation.
-- 401/400 phải báo rõ và không retry vô ích.
+### Negative test đề xuất
+
+- [ ] Kịch bản AI 503 phải kích hoạt fallback audit và annotation rõ lý do.
+- [ ] 400 không retry mù và ghi audit error.
+- [ ] 401 không retry và báo auth issue.
+- [ ] Duplicate scheduler invoke không tạo duplicate annotation.
 
 ---
 
 ## 8. Observability and evidence
 
-Section này trình bày logs/metrics/evidence cần để chốt W12.
-
 ### 8.1 Logs cần có
-- Scheduler invoke metadata.
-- AMP query window, duration, request summary.
-- POST `/v1/predict` request payload size, endpoint, status code.
-- Error category: 400/401/429/503/timeout.
-- Fallback activation reason và threshold value.
-- Idempotency key và duplicate suppression events.
+
+- Scheduler invoke ID và payload summary.
+- AMP query window, duration, và hash/summary của request.
+- AI call status code, latency, error type.
+- Fallback activation reason và threshold được dùng.
+- Idempotency key và duplicate suppression event.
 
 ### 8.2 Metrics cần có
 
-| Metric | Mục đích | Alert |
+| Metric | Vì sao cần | Alert threshold đề xuất |
 |---|---|---|
-| prediction_success_count | đo path AI thành công | sudden drop |
-| ai_error_count | đo dependency AI failure | sustained >0 |
-| fallback_count | đo fail-open kích hoạt | spike bất thường |
-| prediction_duration_ms | đo latency, lead time | p95 cao |
-| scheduler_invoke_failures | đo sự cố Scheduler role/call | >0 |
+| prediction_success_count | Đánh giá path AI chính | sudden drop |
+| ai_error_count | Phát hiện dependency AI issue | sustained >0 |
+| fallback_count | Phát hiện fail-open kích hoạt | spike bất thường |
+| prediction_duration_ms | Theo dõi latency và lead time | p95 cao |
+| scheduler_invoke_failure | Phát hiện Scheduler / permission issue | >0 |
 
-### 8.3 W12 evidence/test đề xuất
+### 8.3 W12 evidence cần attach
 
-- [ ] AI success response audit: xác nhận schema và annotation.
-- [ ] AI 503 fallback test: trigger 503 trên `/v1/predict`, verify static threshold fallback và audit record.
-- [ ] Duplicate invoke / idempotency test: kích hoạt cùng scheduler payload 2 lần, verify only one annotation/audit.
-- [ ] Fallback annotation/audit test: verify fallback path ghi annotation và audit event rõ lý do.
+- [ ] AI success response audit record.
+- [ ] AI 429/503 fallback test.
+- [ ] Grafana fallback annotation hiển thị đúng.
+- [ ] Duplicate invoke / idempotency test.
+- [ ] Fallback annotation/audit case chứng minh logic hoạt động.
 
 ---
 
 ## 9. Cost impact
 
-Section này nêu chi phí và rủi ro chi phí của thiết kế.
-
-| Cost driver | Tác động | Biện pháp giảm |
+| Cost driver | Estimate / risk | Guardrail |
 |---|---|---|
-| Lambda runtime | invoke every 5 phút | giữ cadence, tái sử dụng cold start nếu có thể |
-| AMP query | query window ≥120 phút mỗi prediction | không query theo per-point, chỉ lấy window aggregate |
-| AI calls | mỗi prediction một call, không dồn AI call cho từng data point | giới hạn cadence 5 phút và xử lý retry có backoff |
-| Audit/storage | DynamoDB audit records | dùng TTL và chỉ store summary |
-| Logs | nhiều logs nếu debug không kiểm soát | tóm tắt, redact, levels đúng |
-
-Giải thích thêm:
-- So với SQS-trigger hoặc ECS service, current design hạn chế fixed cost và dễ estimate hơn.
-- Step Functions sẽ tăng chi phí workflow orchestration không cần thiết.
+| Compute/runtime | Lambda invocations every 5 min/service | Giữ cadence 5 phút, hạn chế hot path |
+| Requests/messages | AI calls + AMP query | Không gọi per data point, chỉ một call prediction mỗi lịch |
+| Storage/retention | DynamoDB audit records | Dùng TTL, chỉ lưu summary |
+| Logs/observability | Prediction/fallback logs | Tóm tắt, redact, dùng log level phù hợp |
+| Fixed cost risk | AI Engine ECS/ALB handled separately | Cap concurrency/retry và monitor usage |
 
 ---
 
 ### Ghi chú
-File này là tài liệu bổ sung để hiểu template hiện có và dùng làm bản mẫu điền nội dung. Nó không thay đổi file template gốc mà tạo thêm một bản explanation chuyên dụng.
+Thiết kế này ưu tiên rõ ràng, bảo mật và khả năng vận hành. EventBridge Scheduler chỉ trigger prediction, `signal_window` được xây từ AMP query ≥120 phút, và fail-open static threshold là cơ chế an toàn khi AI không phục vụ.
