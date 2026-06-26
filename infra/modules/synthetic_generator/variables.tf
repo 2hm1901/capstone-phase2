@@ -44,7 +44,7 @@ variable "generator_security_group_id" {
 variable "generator_image_uri" {
   description = <<-EOT
     Full ECR URI for the synthetic generator image including tag or digest,
-    e.g. 123456789012.dkr.ecr.us-west-2.amazonaws.com/cdo08-generator:sha256-abc.
+    e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/cdo08-generator:sha256-abc.
     Leave empty/null during initial IaC scaffolding before the image is built.
   EOT
   type        = string
@@ -107,7 +107,7 @@ variable "ingest_api_endpoint" {
     wiring is deferred and documented in the PR description.
   EOT
   type        = string
-  default     = "https://PLACEHOLDER.execute-api.us-west-2.amazonaws.com/v1/ingest"
+  default     = "https://PLACEHOLDER.execute-api.us-east-1.amazonaws.com/v1/ingest"
 }
 
 # ---------------------------------------------------------------------------

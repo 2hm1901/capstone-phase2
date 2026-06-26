@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS Region for the single CDO08 sandbox environment."
   type        = string
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 variable "workload_vpc_cidr" {
@@ -74,7 +74,7 @@ variable "ingest_api_endpoint" {
     Once merged, wire module.telemetry_ingest.ingest_api_url here.
   EOT
   type        = string
-  default     = "https://PLACEHOLDER.execute-api.us-west-2.amazonaws.com/v1/ingest"
+  default     = "https://PLACEHOLDER.execute-api.us-east-1.amazonaws.com/v1/ingest"
 }
 
 variable "generator_log_retention_days" {
