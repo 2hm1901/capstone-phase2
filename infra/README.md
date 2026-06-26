@@ -16,6 +16,8 @@ infra/
 
 `bootstrap` là administrative setup, không phải một môi trường ứng dụng. State local của bootstrap chỉ dùng để tạo state bucket lần đầu; không commit file state này.
 
+Module hiện có trong repo là `modules/networking`. Các module Terraform khác chỉ được thêm khi có Jira task/PR tương ứng, để tránh nhiều người tạo trùng cùng một resource.
+
 ## Bước 0: kiểm tra AWS user (mọi thành viên)
 
 Yêu cầu: AWS CLI đã cấu hình user IAM riêng của bạn và Terraform `>= 1.10.0`.
@@ -69,6 +71,8 @@ Sau khi plan được team review:
 ```bash
 make tf-apply
 ```
+
+Không chạy `make tf-apply` từ feature branch khi chưa có review plan. Nếu task phụ thuộc resource của người khác chưa merge, dùng `terraform output`, data source hoặc biến input rõ ràng sau khi PR phụ thuộc đã merge; không tạo lại resource thuộc owner khác.
 
 ## Quy ước làm việc
 
