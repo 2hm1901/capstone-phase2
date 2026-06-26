@@ -26,3 +26,9 @@ variable "private_subnet_count" {
     error_message = "private_subnet_count must be between 2 and 3."
   }
 }
+
+variable "ai_engine_alb_ingress_cidrs" {
+  description = "CIDR blocks allowed to reach the AI Engine public ALB on HTTPS."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

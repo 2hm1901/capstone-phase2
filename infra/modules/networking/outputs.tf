@@ -18,13 +18,18 @@ output "ai_engine_private_subnet_ids" {
   value       = aws_subnet.ai_engine_private[*].id
 }
 
+output "ai_engine_public_subnet_ids" {
+  description = "Public subnet IDs for the AI Engine application load balancer."
+  value       = aws_subnet.ai_engine_public[*].id
+}
+
 output "generator_security_group_id" {
   description = "Security group ID for synthetic generator tasks."
   value       = aws_security_group.generator.id
 }
 
 output "ai_engine_alb_security_group_id" {
-  description = "Security group ID for the internal AI Engine ALB."
+  description = "Security group ID for the AI Engine application load balancer."
   value       = aws_security_group.ai_engine_alb.id
 }
 
@@ -36,4 +41,9 @@ output "ai_engine_task_security_group_id" {
 output "ai_engine_s3_endpoint_id" {
   description = "Gateway VPC endpoint ID for AI Engine access to S3 baseline storage."
   value       = aws_vpc_endpoint.ai_engine_s3.id
+}
+
+output "ai_engine_internet_gateway_id" {
+  description = "Internet Gateway ID for the AI Engine VPC public ALB path."
+  value       = aws_internet_gateway.ai_engine.id
 }

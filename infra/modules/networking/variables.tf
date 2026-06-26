@@ -23,6 +23,12 @@ variable "private_subnet_count" {
   type        = number
 }
 
+variable "ai_engine_alb_ingress_cidrs" {
+  description = "CIDR blocks allowed to reach the AI Engine public ALB on HTTPS."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "tags" {
   description = "Common tags applied to all networking resources."
   type        = map(string)
