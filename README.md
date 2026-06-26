@@ -131,7 +131,7 @@ W12 bổ sung `05_cost_analysis.md` với actual cost, `07_test_eval_report.md`,
 
 ## Prerequisites
 
-- AWS account capstone `894597652722`, region `us-west-2`.
+- AWS account capstone `894597652722`, region `ap-southeast-1`.
 - AWS CLI configured với quyền deploy sandbox.
 - Terraform version theo `infra/bootstrap/versions.tf` và `infra/environments/sandbox/versions.tf`.
 - Docker để build generator/Lambda image khi cần.

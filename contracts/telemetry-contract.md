@@ -24,7 +24,7 @@
   "service_id": "fraud-detection",
   "metric_type": "cache_hit_rate_pct",
   "value": 45.5,
-  "labels": {"cache_type": "redis", "region": "us-west-2"}
+  "labels": {"cache_type": "redis", "region": "ap-southeast-1"}
 }
 ```
 
@@ -38,6 +38,7 @@
 > - Đây là **trần throughput ingest đỉnh mà đường ống telemetry (phía CDO) được thiết kế để chịu**, KHÔNG phải tần suất gọi `/v1/predict` của AI engine (engine chỉ nhận window đã gom, ~vài request/phút).
 > - **Cardinality model cho 50k/s peak** (Black Friday): 50k/s đạt được khi cardinality cao — mỗi metric tách theo chiều phụ `instance_id × endpoint × AZ`. Ví dụ ~3M time-series ở 1 phút/lần, hoặc sub-second sampling trên tier-1 hot path. Đây là **design ceiling** để CDO chọn hạ tầng ingest (TSDB/streaming Kinesis-MSK) không vỡ khi traffic 9k RPS Black Friday.
 > - **Demo scope thực tế** (capstone, 3 tier-1 service × signal chính, 1 phút/lần): chỉ ~**tens of events/sec**. 50k/s là trần năng lực, không phải tải demo. Engine + eval chạy trên window đã gom nên không phụ thuộc con số này.
+> - **Lưu ý chi phí:** con số `~$3.5/tháng/signal` ở các bảng dưới là chi phí cho **demo scope** này (vài chục events/s). Ở ceiling thiết kế 50k/s, chi phí ingest/lưu trữ telemetry scale theo GB ingested (Timestream/Prometheus, ~hàng chục–trăm $/tháng tuỳ volume) — đây là **FinOps phía CDO**, tách hoàn toàn khỏi budget $200 của AI Engine.
 
 ### Signal 1: `cpu_usage_percent`
 
@@ -63,7 +64,7 @@
   "service_id": "payment-gateway",
   "metric_type": "cpu_usage_percent",
   "value": 85.5,
-  "labels": {"region": "us-west-2"}
+  "labels": {"region": "ap-southeast-1"}
 }
 ```
 
@@ -91,7 +92,7 @@
   "service_id": "payment-gateway",
   "metric_type": "memory_usage_percent",
   "value": 72.1,
-  "labels": {"region": "us-west-2"}
+  "labels": {"region": "ap-southeast-1"}
 }
 ```
 
@@ -104,6 +105,7 @@
 | **Unit** | count |
 | **Frequency** | 1 phút |
 | **Emit point** | ALB (Application Load Balancer) metrics |
+| **Retention** | 7 ngày hot + 83 ngày cold (tổng 90 ngày minimum) |
 | **Used for** | Correlate giữa traffic spike và resource exhaustion |
 | **Emit SLA** | p99 latency < 60s từ lúc phát sinh metric |
 | **Volume SLA** | 50,000 events/sec peak (đáp ứng requirement TF4 Learner) |
@@ -118,7 +120,7 @@
   "service_id": "payment-gateway",
   "metric_type": "active_connections",
   "value": 4500.0,
-  "labels": {"region": "us-west-2"}
+  "labels": {"region": "ap-southeast-1"}
 }
 ```
 
@@ -146,7 +148,7 @@
   "service_id": "payment-gateway",
   "metric_type": "db_connection_pool_pct",
   "value": 95.0,
-  "labels": {"db_type": "postgres", "region": "us-west-2"}
+  "labels": {"db_type": "postgres", "region": "ap-southeast-1"}
 }
 ```
 
@@ -174,7 +176,7 @@
   "service_id": "ledger-service",
   "metric_type": "queue_depth",
   "value": 15000.0,
-  "labels": {"queue_name": "ledger-events-sqs", "region": "us-west-2"}
+  "labels": {"queue_name": "ledger-events-sqs", "region": "ap-southeast-1"}
 }
 ```
 
@@ -202,7 +204,7 @@
   "service_id": "fraud-detection",
   "metric_type": "cache_hit_rate_pct",
   "value": 45.5,
-  "labels": {"cache_type": "redis", "region": "us-west-2"}
+  "labels": {"cache_type": "redis", "region": "ap-southeast-1"}
 }
 ```
 
@@ -233,7 +235,7 @@
   "service_id": "payment-gateway",
   "metric_type": "api_latency_ms",
   "value": 450.5,
-  "labels": {"region": "us-west-2"}
+  "labels": {"region": "ap-southeast-1"}
 }
 ```
 
@@ -244,7 +246,10 @@ Mọi signal phải comply:
 - **Time precision**: timestamp RFC3339 UTC, millisecond precision.
 - **Schema validation**: AI ingestion layer (Pydantic) validate schema; reject malformed.
 - **Data Alignment & Imputation**: Time buckets gửi vào API phải liền mạch. Nếu hạ tầng bị đứt gãy (Network jitter hoặc Drop metric), CDO **bắt buộc** phải tiền xử lý (Forward-fill hoặc Zero-fill). AI Engine sẽ văng lỗi `400` nếu phát hiện time-series bị thủng.
-- **PII**: KHÔNG được chứa PII (email, phone, name) trong signal value hoặc labels.
+- **PII**: KHÔNG được chứa PII trong signal value hoặc labels. Denylist (mở rộng cho domain payment/fraud/ledger, bắt buộc theo PCI-DSS/SOC2):
+  - PII chung: `email`, `phone`, `name`.
+  - Định danh tài chính / khách hàng: `transaction_id`, `account_id`, `card_pan` (số thẻ), `user_id`.
+  - Điểm thực thi: **CDO ingestion layer** strip/redact trước khi push sang AI API (AI Engine chỉ nhận metric số đã ẩn danh). Metric value thuần số nên rủi ro thấp, nhưng denylist là yêu cầu compliance bắt buộc.
 
 > **Baseline coverage (Pack #1)**: AI engine train per-service STL baseline cho 4 signal chính
 > (`cpu_usage_percent`, `memory_usage_percent`, `api_latency_ms`, `queue_depth`). Các signal còn

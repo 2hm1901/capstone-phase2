@@ -52,7 +52,7 @@ Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-se
 
 ## 5. Constraints
 
-- **Cloud:** AWS-only, single region `us-west-2`. DR multi-region chỉ design-only.
+- **Cloud:** AWS-only, single region `ap-southeast-1`. DR multi-region chỉ design-only.
 - **Timeline:** Contract freeze T5 W11; EOD T6 W11 cần base infra; W12 tích hợp real engine, test và hoàn tất evidence. Code freeze 08:00 T5 W12, 02/07/2026.
 - **Data and scope:** Không ingest PII, không dùng production traffic hoặc historical 6-month data. Grafana annotation thay UI mới.
 - **Cost:** Resource có tags, budget alert và teardown/runbook; không vượt rough cap $200/tháng.

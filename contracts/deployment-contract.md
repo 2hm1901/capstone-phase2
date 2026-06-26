@@ -31,6 +31,7 @@
 Để đảm bảo tuyệt đối không vượt ngân sách $200/tháng theo yêu cầu của Client:
 - **Cost Alerting**: Cấu hình AWS Budgets gửi cảnh báo khi chi phí đạt 80% ($160).
 - **Circuit Breaker**: Khi chi phí đạt 100% ($200), tự động trigger AWS Lambda để gỡ toàn bộ Auto Scaling Group và ép `Desired_Count = 0` (Scale to Zero) cho ECS Fargate cluster nhằm chặn đứng mọi chi phí phát sinh thêm.
+  - *Thứ tự ưu tiên (có chủ đích):* ràng buộc ngân sách $200 là **hard requirement của Client** nên được ưu tiên **cao hơn** SLA availability 99.5%. Đây là **fail-open**: khi engine scale-to-zero, CDO tự fallback về rule-based alert (xem Failure modes) nên monitoring KHÔNG gián đoạn. Thực tế cost đo ~$36/tháng nên CB gần như không bao giờ kích hoạt — đây là van an toàn cho kịch bản cực đoan, không phải chế độ vận hành thường.
 
 ## Scaling
 
@@ -48,7 +49,7 @@
 
 | Config / Secret | Source | Note |
 |---|---|---|
-| `AWS_REGION` | env var | us-west-2 |
+| `AWS_REGION` | env var | ap-southeast-1 |
 | `BASELINE_BACKEND` | env var | `s3` (prod) / `local` (dev fallback) |
 | `BASELINE_S3_BUCKET` | env var | bucket chứa per-service baseline JSON |
 | `BASELINE_S3_PREFIX` | env var | mặc định `baselines/` |
@@ -66,19 +67,19 @@
 
 | Aspect | Configuration |
 |---|---|
-| **Subnet type** | public subnets cho ALB, private subnets cho ECS tasks |
-| **ALB** | internet-facing HTTPS ingress do từng CDO kiểm soát; ECS tasks không public IP |
+| **Subnet type** | private |
+| **ALB** | internal only (không public-facing) |
 | **Security group** | `tf-4-ai-engine-sg` |
-| **Ingress rules** | HTTPS tới ALB; ưu tiên allowlist CIDR nếu có thể; service vẫn enforce IAM SigV4 và `X-Tenant-Id` |
+| **Ingress rules** | chỉ allow từ CDO platforms trong cùng task force (SG-to-SG reference) |
 | **Egress rules** | Cần egress tới AWS Services (CloudWatch ghi log, S3 đọc baseline) thông qua VPC Endpoint hoặc NAT Gateway. Không cần egress ra Internet public. |
-| **DNS** | endpoint HTTPS thuộc từng CDO platform; private DNS là optional nếu triển khai internal-only sau này |
+| **DNS** | resolve được trong VPC (route 53 private hosted zone) |
 
 ## Deployment topology diagram
 
 ```mermaid
 graph TD
-    Client["CDO Prediction Lambda"] --> ALB["Public HTTPS ALB"]
-    ALB --> ECS["Private ECS Fargate Task (Foresight Lens API)"]
+    Client["CDO Platforms (Payment, Fraud, Ledger)"] --> ALB["Internal ALB"]
+    ALB --> ECS["ECS Fargate Task (Foresight Lens API)"]
     ECS --> S3["Amazon S3 (Baseline Storage)"]
     ECS --> CW["CloudWatch (Audit Logs & Metrics)"]
 ```
@@ -89,15 +90,25 @@ Do tính chất bài toán TF4, kiến trúc triển khai bắt buộc chia làm
 Quá trình **Model Training** (Học baseline cho từng service) sẽ được thiết kế trên giấy: chạy batch job qua AWS SageMaker hoặc AWS Batch 1 lần/tuần.
 *Ghi chú:* **ADR (Architecture Decision Record)** sẽ định nghĩa chi tiết Logic Trigger tự động (Retrain trigger logic) khi model bị drift theo đúng yêu cầu của Mentor. Nhóm CDO không cần setup hạ tầng training này.
 
+### Baseline lifecycle (Design-only)
+
+Vòng đời của per-service STL baseline (seasonal profile + residual σ). Đây là thiết kế trên giấy, KHÔNG yêu cầu CDO implement:
+
+| Aspect | Configuration |
+|---|---|
+| **Retrain trigger** | (1) Định kỳ Thứ Hai hàng tuần (lấy 7 ngày gần nhất); (2) Drift-triggered khi FP-rate/Brier vượt ngưỡng trong 24h. Chi tiết: `docs/05_adrs.md` ADR-005. |
+| **Registry** | Baseline versioned trên S3 — prefix `{BASELINE_S3_PREFIX}{version}/` (vd `baselines/v2/`); giữ ≥ 2 version gần nhất để rollback. |
+| **Promotion gate** | Baseline mới chỉ được swap vào serving khi **pass holdout gate** (recall ≥ 80%, FP ≤ 12%) đo bằng `tf4-evidence/eval_engine.py` (ADR-004). Promote = trỏ env var `BASELINE_S3_PREFIX`/version sang bản mới; fail gate → giữ bản cũ. |
+
 ## Per-CDO platform pointer
 
 Do mỗi CDO tự deploy engine lên hạ tầng riêng, URL sẽ thuộc về domain của từng CDO:
 
 | CDO platform | Endpoint URL | Auth |
 |---|---|---|
-| CDO-Payment | `https://ai-engine.payment.cdo-1.example/` | IAM SigV4 |
-| CDO-Fraud | `https://ai-engine.fraud.cdo-2.example/` | IAM SigV4 |
-| CDO-Ledger | `https://ai-engine.ledger.cdo-3.example/` | IAM SigV4 |
+| CDO-Payment | `https://ai-engine.payment.cdo-1.internal/` | IAM SigV4 |
+| CDO-Fraud | `https://ai-engine.fraud.cdo-2.internal/` | IAM SigV4 |
+| CDO-Ledger | `https://ai-engine.ledger.cdo-3.internal/` | IAM SigV4 |
 
 ## Rollout strategy: Canary
 

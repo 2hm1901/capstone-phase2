@@ -2,9 +2,9 @@ terraform {
   required_version = ">= 1.10.0, < 2.0.0"
 
   backend "s3" {
-    bucket       = "cdo08-tf-state-894597652722-us-west-2"
+    bucket       = "cdo08-tf-state-894597652722-ap-southeast-1"
     key          = "cdo08/sandbox/terraform.tfstate"
-    region       = "us-west-2"
+    region       = "ap-southeast-1"
     encrypt      = true
     use_lockfile = true
   }
