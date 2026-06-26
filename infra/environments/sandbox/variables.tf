@@ -82,3 +82,165 @@ variable "generator_log_retention_days" {
   type        = number
   default     = 14
 }
+variable "enable_prediction" {
+  description = "Enable Prediction/Scheduler/Fail-open resources. Keep false until Lambda packages and AI endpoint are ready."
+  type        = bool
+  default     = false
+}
+
+variable "enable_writer_event_source_mapping" {
+  description = "Enable SQS to Writer Lambda event source mapping only after the real telemetry queue output is available."
+  type        = bool
+  default     = false
+}
+
+# ---------------------------------------------------------------------------
+# observability_audit module variables
+# ---------------------------------------------------------------------------
+
+variable "audit_table_name" {
+  description = "Name of the DynamoDB audit table. Defaults to <name_prefix>-audit."
+  type        = string
+  default     = null
+}
+
+variable "audit_retention_days" {
+  description = "Audit record retention in days. Used for the TTL attribute and PR documentation."
+  type        = number
+  default     = 90
+}
+
+variable "audit_ttl_enabled" {
+  description = "Enable DynamoDB TTL on the expires_at attribute. Set false to defer TTL activation."
+  type        = bool
+  default     = true
+}
+
+variable "create_grafana_workspace" {
+  description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
+  type        = bool
+  default     = false
+}
+
+variable "prediction_service_list" {
+  description = "Services scheduled for prediction."
+  type = list(object({
+    service_id          = string
+    tenant_id           = string
+    schedule_expression = optional(string, "rate(5 minutes)")
+    enabled             = optional(bool, true)
+  }))
+  default = [
+    { service_id = "payment-api", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "queue-worker", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "gateway-api", tenant_id = "tenant-cdo08-demo" },
+  ]
+}
+
+variable "prediction_package_path" {
+  description = "Local zip path for Prediction Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/prediction.zip"
+}
+
+variable "serving_adapter_package_path" {
+  description = "Local zip path for Serving Adapter Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/serving-adapter.zip"
+}
+
+variable "fallback_package_path" {
+  description = "Local zip path for Fallback Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/fallback.zip"
+}
+
+variable "writer_batch_size" {
+  description = "Telemetry Writer SQS batch size."
+  type        = number
+  default     = 50
+}
+
+variable "writer_maximum_batching_window_seconds" {
+  description = "Telemetry Writer maximum SQS batching window in seconds."
+  type        = number
+  default     = 5
+}
+
+variable "writer_timeout_seconds" {
+  description = "Telemetry Writer Lambda timeout in seconds."
+  type        = number
+  default     = 30
+}
+
+variable "writer_memory_size" {
+  description = "Telemetry Writer Lambda memory size in MB."
+  type        = number
+  default     = 256
+}
+
+variable "writer_reserved_concurrency" {
+  description = "Telemetry Writer Lambda reserved concurrency."
+  type        = number
+  default     = 3
+}
+
+variable "writer_log_retention_days" {
+  description = "Telemetry Writer CloudWatch log retention in days."
+  type        = number
+  default     = 14
+}
+
+variable "grafana_workspace_id" {
+  description = "Existing Amazon Managed Grafana workspace ID for reference mode. Set null to create a new workspace."
+  type        = string
+  default     = null
+}
+
+variable "grafana_workspace_name" {
+  description = "Name for the new Amazon Managed Grafana workspace when grafana_workspace_id is null."
+  type        = string
+  default     = null
+}
+
+variable "grafana_datasource_uid" {
+  description = "Existing Grafana datasource UID for the AMP workspace. Set null to defer datasource wiring until the AMP module merges."
+  type        = string
+  default     = null
+}
+
+variable "alarm_audit_write_error_threshold" {
+  description = "Threshold for the audit write error alarm (number of errors in the evaluation period)."
+  type        = number
+  default     = 0
+}
+
+variable "alarm_annotation_error_period_secs" {
+  description = "Evaluation period in seconds for the annotation error alarm."
+  type        = number
+  default     = 300
+}
+
+variable "alarm_annotation_error_threshold" {
+  description = "Threshold for the annotation error alarm (number of errors in the evaluation period)."
+  type        = number
+  default     = 0
+}
+
+variable "alarm_fallback_count_threshold" {
+  description = "Threshold for the fallback annotation count alarm over the evaluation period."
+  type        = number
+  default     = 5
+}
+
+variable "alarm_fallback_count_period_secs" {
+  description = "Evaluation period in seconds for the fallback annotation count alarm."
+  type        = number
+  default     = 300
+}
+
+variable "reviewer_principal_arns" {
+  description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
+  type        = list(string)
+  default     = []
+}
