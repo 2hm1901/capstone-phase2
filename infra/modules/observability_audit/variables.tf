@@ -1,41 +1,18 @@
+variable "name_prefix" {
+  description = "Name prefix for observability and audit resources."
+  type        = string
+}
+
+variable "tags" {
+  description = "Common tags applied to all observability and audit resources."
+  type        = map(string)
+  default     = {}
+}
+
 variable "aws_region" {
-  description = "AWS Region for the single CDO08 sandbox environment."
+  description = "AWS Region for regional resource names (e.g. CloudWatch dashboard)."
   type        = string
-  default     = "us-east-1"
 }
-
-variable "workload_vpc_cidr" {
-  description = "CIDR block for the synthetic workload/services VPC."
-  type        = string
-  default     = "10.10.0.0/16"
-}
-
-variable "ai_engine_vpc_cidr" {
-  description = "CIDR block for the AI Engine runtime VPC."
-  type        = string
-  default     = "10.20.0.0/16"
-}
-
-variable "private_subnet_count" {
-  description = "Number of private subnets to create per VPC."
-  type        = number
-  default     = 2
-
-  validation {
-    condition     = var.private_subnet_count >= 2 && var.private_subnet_count <= 3
-    error_message = "private_subnet_count must be between 2 and 3."
-  }
-}
-
-variable "ai_engine_alb_ingress_cidrs" {
-  description = "CIDR blocks allowed to reach the AI Engine public ALB on HTTPS."
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-}
-
-# ---------------------------------------------------------------------------
-# observability_audit module variables
-# ---------------------------------------------------------------------------
 
 variable "audit_table_name" {
   description = "Name of the DynamoDB audit table. Defaults to <name_prefix>-audit."
@@ -62,15 +39,15 @@ variable "audit_kms_key_arn" {
 }
 
 variable "audit_reader_principal_arns" {
-  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role."
+  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role (fail-safe: no implicit account-root access)."
   type        = list(string)
   default     = []
 }
 
-variable "create_grafana_workspace" {
-  description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
-  type        = bool
-  default     = false
+variable "grafana_secret_arn" {
+  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Set null to defer until the security module merges. This module never creates or stores the token."
+  type        = string
+  default     = null
 }
 
 variable "grafana_workspace_id" {
@@ -93,12 +70,6 @@ variable "grafana_datasource_uid" {
 
 variable "amp_workspace_id" {
   description = "Amazon Managed Prometheus workspace ID consumed to configure a Grafana AMP datasource. Set null to defer datasource wiring until the AMP module merges."
-  type        = string
-  default     = null
-}
-
-variable "grafana_secret_arn" {
-  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Set null to defer until the security module merges."
   type        = string
   default     = null
 }
@@ -132,8 +103,9 @@ variable "alarm_fallback_count_period_secs" {
   type        = number
   default     = 300
 }
-variable "reviewer_principal_arns" {
-  description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
-  type        = list(string)
-  default     = []
+
+variable "create_grafana_workspace" {
+  description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace; requires the account to have the necessary permissions and Grafana service role."
+  type        = bool
+  default     = false
 }
