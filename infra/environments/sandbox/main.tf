@@ -21,6 +21,41 @@ module "networking" {
   tags                        = local.common_tags
 }
 
+module "prediction" {
+  source = "../../modules/prediction"
+
+  name_prefix       = local.name_prefix
+  aws_region        = var.aws_region
+  enable_prediction = var.enable_prediction
+
+  service_list                = var.prediction_service_list
+  prediction_interval_minutes = 5
+  lookback_minutes            = 120
+
+  amp_workspace_id   = module.telemetry_store.amp_workspace_id
+  amp_workspace_arn  = module.telemetry_store.amp_workspace_arn
+  amp_query_endpoint = module.telemetry_store.amp_query_endpoint
+
+  # AI Engine runtime is implemented separately. Keep disabled until the endpoint
+  # and Lambda packages are ready.
+  ai_engine_endpoint   = null
+  ai_engine_invoke_arn = null
+
+  audit_table_arn              = module.observability_audit.audit_table_arn
+  audit_table_name             = module.observability_audit.audit_table_name
+  grafana_api_token_secret_arn = module.security_baseline.grafana_secret_arn
+
+  prediction_role_arn          = module.security_baseline.prediction_role_arn
+  serving_adapter_role_arn     = module.security_baseline.prediction_role_arn
+  fallback_role_arn            = module.security_baseline.fallback_role_arn
+  scheduler_role_arn           = module.security_baseline.scheduler_role_arn
+  prediction_package_path      = var.prediction_package_path
+  serving_adapter_package_path = var.serving_adapter_package_path
+  fallback_package_path        = var.fallback_package_path
+
+  tags = local.common_tags
+}
+
 data "archive_file" "ingest_placeholder" {
   type        = "zip"
   source_dir  = "../../packages/ingest_placeholder"

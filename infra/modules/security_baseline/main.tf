@@ -432,6 +432,15 @@ data "aws_iam_policy_document" "prediction" {
   }
 
   statement {
+    effect  = "Allow"
+    actions = ["lambda:InvokeFunction"]
+    resources = [
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.name_prefix}-serving-adapter-lambda",
+      "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.name_prefix}-fallback-lambda"
+    ]
+  }
+
+  statement {
     effect    = "Allow"
     actions   = ["dynamodb:PutItem"]
     resources = ["arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${var.name_prefix}-audit*"]

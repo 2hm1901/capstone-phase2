@@ -33,6 +33,12 @@ variable "ai_engine_alb_ingress_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "enable_prediction" {
+  description = "Enable Prediction/Scheduler/Fail-open resources. Keep false until Lambda packages and AI endpoint are ready."
+  type        = bool
+  default     = false
+}
+
 variable "enable_writer_event_source_mapping" {
   description = "Enable SQS to Writer Lambda event source mapping only after the real telemetry queue output is available."
   type        = bool
@@ -65,6 +71,39 @@ variable "create_grafana_workspace" {
   description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
   type        = bool
   default     = false
+}
+
+variable "prediction_service_list" {
+  description = "Services scheduled for prediction."
+  type = list(object({
+    service_id          = string
+    tenant_id           = string
+    schedule_expression = optional(string, "rate(5 minutes)")
+    enabled             = optional(bool, true)
+  }))
+  default = [
+    { service_id = "payment-api", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "queue-worker", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "gateway-api", tenant_id = "tenant-cdo08-demo" },
+  ]
+}
+
+variable "prediction_package_path" {
+  description = "Local zip path for Prediction Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/prediction.zip"
+}
+
+variable "serving_adapter_package_path" {
+  description = "Local zip path for Serving Adapter Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/serving-adapter.zip"
+}
+
+variable "fallback_package_path" {
+  description = "Local zip path for Fallback Lambda code. Required only when enable_prediction=true."
+  type        = string
+  default     = "build/fallback.zip"
 }
 
 variable "writer_batch_size" {
