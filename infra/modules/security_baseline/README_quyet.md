@@ -25,8 +25,9 @@ Tôi đã xây dựng module mới **`security_baseline`** tại thư mục [inf
 
 ### 1.2. Quản lý Secrets & SSM Parameters
 - **Secrets Manager**:
-  - Chỉ tạo container secret cho `grafana-token` và `telemetry-ingest-key`. **Không tạo version (`aws_secretsmanager_secret_version`) thông qua Terraform** để tránh lưu trữ giá trị secret (kể cả placeholder) trong tệp tin state của Terraform.
+  - Chỉ tạo container secret cho `grafana-token`. **Không tạo version (`aws_secretsmanager_secret_version`) thông qua Terraform** để tránh lưu trữ giá trị secret trong tệp tin state.
   - Đặt cấu hình `recovery_window_in_days = 0` (force delete) để dễ dàng dọn dẹp và test trong môi trường sandbox.
+  - Quyết định thiết kế: Không tạo secret cho `telemetry-ingest-key` vì hệ thống ưu tiên sử dụng IAM authorization cho ingest endpoint nhằm đảm bảo an ninh tối đa.
 - **SSM Parameters**:
   - Lưu cấu hình tĩnh không nhạy cảm: `amp/workspace_id`, `ai/endpoint`, `ai/baseline_bucket`, `ai/baseline_prefix`, `ai/otel_endpoint`.
   - **Quy định Ownership**: Module `security_baseline` là **Owner chính thức** của namespace cấu hình này (được khởi tạo với giá trị placeholder). Các module khác (ví dụ: Lambda của Nam/Nhân) sẽ đóng vai trò **Consumer** (đọc giá trị cấu hình qua parameter store hoặc output từ module này) và chỉ thực hiện cập nhật giá trị runtime thông qua outputs/parameters mà không tự ý khởi tạo/khai báo lại các resource này để tránh xung đột ownership.
@@ -59,7 +60,7 @@ Khi chạy lệnh `terraform -chdir=infra/environments/sandbox plan` trên tài 
 ### 2.1. Danh sách Tài nguyên được tạo mới (41 tài nguyên)
 - `aws_kms_key.security` và `aws_kms_alias.security` (KMS CMK).
 - `aws_s3_bucket.ai_baselines`, `aws_s3_bucket_public_access_block`, `aws_s3_bucket_ownership_controls`, `aws_s3_bucket_server_side_encryption_configuration` (sử dụng khóa KMS CMK), `aws_s3_bucket_versioning` và `aws_s3_bucket_policy` (S3).
-- `aws_secretsmanager_secret` cho Grafana token và Ingest key.
+- `aws_secretsmanager_secret` cho Grafana token.
 - `aws_ssm_parameter` (5 tham số cấu hình hệ thống).
 - `aws_cloudwatch_log_group.ai_engine_app` & `aws_cloudwatch_log_group.ai_engine_audit`.
 - `aws_ecr_repository.ai_engine`.
@@ -71,7 +72,6 @@ Sau khi thực hiện `terraform apply`, các Outputs dưới đây sẽ đượ
 - `kms_key_arn` / `kms_key_id`: Thông tin khóa KMS CMK để mã hóa bảng dữ liệu.
 - `baseline_bucket_name` / `baseline_bucket_arn`: Tên bucket baseline (`cdo08-sandbox-ai-baselines-894597652722`).
 - `grafana_secret_arn`: ARN của Grafana secret để Lambda lấy token.
-- `ingest_secret_arn`: ARN của ingest API key secret.
 - `ai_engine_ecr_repo_url`: URL đẩy docker image của AI Engine.
 - `ai_engine_app_log_group_name` / `ai_engine_audit_log_group_name`: Tên các Log Groups cho AI Engine.
 - ARNs của 8 IAM Roles độc lập:

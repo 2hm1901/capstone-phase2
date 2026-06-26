@@ -112,11 +112,6 @@ output "grafana_secret_arn" {
   value       = module.security_baseline.grafana_secret_arn
 }
 
-output "ingest_secret_arn" {
-  description = "ARN of the telemetry ingest API key secret"
-  value       = module.security_baseline.ingest_secret_arn
-}
-
 output "generator_role_arn" {
   description = "ARN of the Generator role"
   value       = module.security_baseline.generator_role_arn

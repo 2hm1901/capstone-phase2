@@ -153,12 +153,6 @@ resource "aws_secretsmanager_secret" "grafana_token" {
   tags                    = var.tags
 }
 
-resource "aws_secretsmanager_secret" "telemetry_ingest_key" {
-  name                    = "${var.name_prefix}-telemetry-ingest-key"
-  recovery_window_in_days = 0
-  tags                    = var.tags
-}
-
 
 # ==============================================================================
 # 4. SSM PARAMETERS
@@ -663,8 +657,7 @@ data "aws_iam_policy_document" "reviewer_deny" {
       "secretsmanager:DescribeSecret"
     ]
     resources = [
-      aws_secretsmanager_secret.grafana_token.arn,
-      aws_secretsmanager_secret.telemetry_ingest_key.arn
+      aws_secretsmanager_secret.grafana_token.arn
     ]
   }
 

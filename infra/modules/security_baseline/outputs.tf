@@ -23,10 +23,6 @@ output "grafana_secret_arn" {
   value       = aws_secretsmanager_secret.grafana_token.arn
 }
 
-output "ingest_secret_arn" {
-  description = "ARN of the telemetry ingest API key secret"
-  value       = aws_secretsmanager_secret.telemetry_ingest_key.arn
-}
 
 output "generator_role_arn" {
   description = "ARN of the Generator role"
