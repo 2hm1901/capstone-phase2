@@ -33,6 +33,46 @@ variable "ai_engine_alb_ingress_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+# ---------------------------------------------------------------------------
+# Synthetic Generator variables (Owner: Thuy)
+# ---------------------------------------------------------------------------
+
+variable "generator_image_uri" {
+  description = "Full ECR URI for the synthetic generator image. Leave empty to create only ECR/cluster scaffolding."
+  type        = string
+  default     = ""
+}
+
+variable "generator_tenant_id" {
+  description = "Tenant ID injected into every synthetic telemetry event."
+  type        = string
+  default     = "tenant-cdo08-demo"
+}
+
+variable "generator_service_list" {
+  description = "Comma-separated list of service_id values the generator emits for."
+  type        = string
+  default     = "payment-api,queue-worker,gateway-api"
+}
+
+variable "generator_scenario_list" {
+  description = "Comma-separated list of test scenarios."
+  type        = string
+  default     = "gradual_drift,sudden_spike,slow_leak,noisy_baseline"
+}
+
+variable "generator_emit_interval_seconds" {
+  description = "Interval in seconds between telemetry emits per service/metric."
+  type        = number
+  default     = 60
+}
+
+variable "generator_log_retention_days" {
+  description = "CloudWatch log retention in days for generator task logs."
+  type        = number
+  default     = 14
+}
+
 variable "enable_prediction" {
   description = "Enable Prediction/Scheduler/Fail-open resources. Keep false until Lambda packages and AI endpoint are ready."
   type        = bool

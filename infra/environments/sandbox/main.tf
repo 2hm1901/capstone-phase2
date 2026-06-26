@@ -21,6 +21,38 @@ module "networking" {
   tags                        = local.common_tags
 }
 
+# ---------------------------------------------------------------------------
+module "synthetic_generator" {
+  source = "../../modules/synthetic_generator"
+
+  name_prefix = local.name_prefix
+  aws_region  = var.aws_region
+  tags        = local.common_tags
+
+  # Networking — from module.networking (no new VPC/SG)
+  vpc_id                      = module.networking.workload_vpc_id
+  private_subnet_ids          = module.networking.workload_private_subnet_ids
+  generator_security_group_id = module.networking.generator_security_group_id
+  task_role_arn               = module.security_baseline.generator_role_arn
+
+  # Empty image means Terraform creates the generator ECR/cluster scaffolding
+  # only; task definition and schedule stay disabled until the image exists.
+  generator_image_uri = var.generator_image_uri
+
+  # Generator behaviour
+  tenant_id             = var.generator_tenant_id
+  service_list          = var.generator_service_list
+  scenario_list         = var.generator_scenario_list
+  emit_interval_seconds = var.generator_emit_interval_seconds
+
+  ingest_api_endpoint = module.telemetry_ingest.api_endpoint
+
+  log_retention_days = var.generator_log_retention_days
+}
+
+# ---------------------------------------------------------------------------
+# Networking outputs
+# ---------------------------------------------------------------------------
 module "prediction" {
   source = "../../modules/prediction"
 
@@ -159,6 +191,40 @@ output "ai_engine_task_security_group_id" {
 output "ai_engine_internet_gateway_id" {
   description = "Internet Gateway ID for the AI Engine VPC public ALB path."
   value       = module.networking.ai_engine_internet_gateway_id
+}
+
+# ---------------------------------------------------------------------------
+# Synthetic Generator outputs (Owner: Thuy)
+# ---------------------------------------------------------------------------
+
+output "generator_cluster_arn" {
+  description = "ARN of the ECS cluster for the synthetic generator."
+  value       = module.synthetic_generator.cluster_arn
+}
+
+output "generator_cluster_name" {
+  description = "Name of the ECS cluster for the synthetic generator."
+  value       = module.synthetic_generator.cluster_name
+}
+
+output "generator_task_definition_arn" {
+  description = "ARN of the generator ECS task definition."
+  value       = module.synthetic_generator.task_definition_arn
+}
+
+output "generator_task_role_arn" {
+  description = "ARN of the generator IAM task role."
+  value       = module.synthetic_generator.task_role_arn
+}
+
+output "generator_log_group_name" {
+  description = "CloudWatch log group name for generator tasks."
+  value       = module.synthetic_generator.log_group_name
+}
+
+output "generator_ecr_repository_url" {
+  description = "ECR repository URL for the generator image."
+  value       = module.synthetic_generator.ecr_repository_url
 }
 
 output "amp_workspace_id" {
