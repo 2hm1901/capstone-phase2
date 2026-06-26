@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS Region for the single CDO08 sandbox environment."
   type        = string
-  default     = "ap-southeast-1"
+  default     = "us-east-1"
 }
 
 variable "workload_vpc_cidr" {
@@ -31,4 +31,158 @@ variable "ai_engine_alb_ingress_cidrs" {
   description = "CIDR blocks allowed to reach the AI Engine public ALB on HTTPS."
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+variable "telemetry_queue_arn" {
+  description = "Temporary telemetry queue ARN placeholder. Replace with module.telemetry_ingest output after that module is merged."
+  type        = string
+  default     = "arn:aws:sqs:us-east-1:894597652722:cdo08-sandbox-telemetry-queue-placeholder"
+}
+
+variable "telemetry_queue_url" {
+  description = "Temporary telemetry queue URL placeholder. Replace with module.telemetry_ingest output after that module is merged."
+  type        = string
+  default     = "https://sqs.us-east-1.amazonaws.com/894597652722/cdo08-sandbox-telemetry-queue-placeholder"
+}
+
+variable "telemetry_dlq_name" {
+  description = "Temporary telemetry DLQ name placeholder for alarm wiring. Replace with module.telemetry_ingest output after that module is merged."
+  type        = string
+  default     = "cdo08-sandbox-telemetry-dlq-placeholder"
+}
+
+variable "enable_writer_event_source_mapping" {
+  description = "Enable SQS to Writer Lambda event source mapping only after the real telemetry queue output is available."
+  type        = bool
+  default     = false
+}
+
+# ---------------------------------------------------------------------------
+# observability_audit module variables
+# ---------------------------------------------------------------------------
+
+variable "audit_table_name" {
+  description = "Name of the DynamoDB audit table. Defaults to <name_prefix>-audit."
+  type        = string
+  default     = null
+}
+
+variable "audit_retention_days" {
+  description = "Audit record retention in days. Used for the TTL attribute and PR documentation."
+  type        = number
+  default     = 90
+}
+
+variable "audit_ttl_enabled" {
+  description = "Enable DynamoDB TTL on the expires_at attribute. Set false to defer TTL activation."
+  type        = bool
+  default     = true
+}
+
+variable "audit_reader_principal_arns" {
+  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role."
+  type        = list(string)
+  default     = []
+}
+
+variable "create_grafana_workspace" {
+  description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
+  type        = bool
+  default     = false
+}
+
+variable "writer_batch_size" {
+  description = "Telemetry Writer SQS batch size."
+  type        = number
+  default     = 50
+}
+
+variable "writer_maximum_batching_window_seconds" {
+  description = "Telemetry Writer maximum SQS batching window in seconds."
+  type        = number
+  default     = 5
+}
+
+variable "writer_timeout_seconds" {
+  description = "Telemetry Writer Lambda timeout in seconds."
+  type        = number
+  default     = 30
+}
+
+variable "writer_memory_size" {
+  description = "Telemetry Writer Lambda memory size in MB."
+  type        = number
+  default     = 256
+}
+
+variable "writer_reserved_concurrency" {
+  description = "Telemetry Writer Lambda reserved concurrency."
+  type        = number
+  default     = 3
+}
+
+variable "writer_log_retention_days" {
+  description = "Telemetry Writer CloudWatch log retention in days."
+  type        = number
+  default     = 14
+}
+
+variable "grafana_workspace_id" {
+  description = "Existing Amazon Managed Grafana workspace ID for reference mode. Set null to create a new workspace."
+  type        = string
+  default     = null
+}
+
+variable "grafana_workspace_name" {
+  description = "Name for the new Amazon Managed Grafana workspace when grafana_workspace_id is null."
+  type        = string
+  default     = null
+}
+
+variable "grafana_datasource_uid" {
+  description = "Existing Grafana datasource UID for the AMP workspace. Set null to defer datasource wiring until the AMP module merges."
+  type        = string
+  default     = null
+}
+
+variable "amp_workspace_id" {
+  description = "Amazon Managed Prometheus workspace ID consumed to configure a Grafana AMP datasource. Set null to defer datasource wiring until the AMP module merges."
+  type        = string
+  default     = null
+}
+
+variable "alarm_audit_write_error_threshold" {
+  description = "Threshold for the audit write error alarm (number of errors in the evaluation period)."
+  type        = number
+  default     = 0
+}
+
+variable "alarm_annotation_error_period_secs" {
+  description = "Evaluation period in seconds for the annotation error alarm."
+  type        = number
+  default     = 300
+}
+
+variable "alarm_annotation_error_threshold" {
+  description = "Threshold for the annotation error alarm (number of errors in the evaluation period)."
+  type        = number
+  default     = 0
+}
+
+variable "alarm_fallback_count_threshold" {
+  description = "Threshold for the fallback annotation count alarm over the evaluation period."
+  type        = number
+  default     = 5
+}
+
+variable "alarm_fallback_count_period_secs" {
+  description = "Evaluation period in seconds for the fallback annotation count alarm."
+  type        = number
+  default     = 300
+}
+
+variable "reviewer_principal_arns" {
+  description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
+  type        = list(string)
+  default     = []
 }

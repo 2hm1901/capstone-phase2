@@ -21,6 +21,35 @@ module "networking" {
   tags                        = local.common_tags
 }
 
+module "telemetry_store" {
+  source = "../../modules/telemetry_store"
+
+  name_prefix         = local.name_prefix
+  environment         = "sandbox"
+  amp_workspace_alias = "${local.name_prefix}-amp"
+
+  # TODO: replace these placeholder variables with module.telemetry_ingest
+  # outputs after Phuong's telemetry ingest module is merged. This module does
+  # not create a duplicate telemetry SQS queue or DLQ.
+  telemetry_queue_arn = var.telemetry_queue_arn
+  telemetry_queue_url = var.telemetry_queue_url
+  telemetry_dlq_name  = var.telemetry_dlq_name
+
+  enable_writer_event_source_mapping = var.enable_writer_event_source_mapping
+
+  writer_source_dir                     = "${path.module}/../../../src/writer"
+  batch_size                            = var.writer_batch_size
+  maximum_batching_window_in_seconds    = var.writer_maximum_batching_window_seconds
+  writer_timeout_seconds                = var.writer_timeout_seconds
+  writer_memory_size                    = var.writer_memory_size
+  writer_reserved_concurrency           = var.writer_reserved_concurrency
+  log_retention_days                    = var.writer_log_retention_days
+  writer_duration_alarm_threshold_ms    = 25000
+  sqs_queue_age_alarm_threshold_seconds = 300
+
+  tags = local.common_tags
+}
+
 output "workload_vpc_id" {
   description = "ID of the synthetic workload/services VPC."
   value       = module.networking.workload_vpc_id
@@ -70,30 +99,3 @@ output "ai_engine_internet_gateway_id" {
   description = "Internet Gateway ID for the AI Engine VPC public ALB path."
   value       = module.networking.ai_engine_internet_gateway_id
 }
-
-data "archive_file" "ingest_placeholder" {
-  type        = "zip"
-  source_dir  = "../../packages/ingest_placeholder"
-  output_path = "../../packages/ingest_placeholder.zip"
-}
-
-module "telemetry_ingest" {
-  source = "../../modules/telemetry_ingest"
-
-  name_prefix         = local.name_prefix
-  api_stage           = "sandbox"
-  auth_mode           = "IAM"
-  lambda_package_path = data.archive_file.ingest_placeholder.output_path
-
-  lambda_timeout              = 10
-  lambda_memory               = 256
-  ingest_reserved_concurrency = 10
-  queue_retention_seconds     = 345600
-  visibility_timeout_seconds  = 60
-  max_receive_count           = 5
-  log_retention_days          = 14
-
-  api_throttling_burst_limit = 1000
-  api_throttling_rate_limit  = 1000
-}
-

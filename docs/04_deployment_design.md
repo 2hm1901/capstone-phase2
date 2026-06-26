@@ -219,7 +219,7 @@ Smoke test tối thiểu:
   "service_id": "payment-api",
   "metric_type": "api_latency_ms",
   "value": 450.5,
-  "labels": {"region": "ap-southeast-1"}
+  "labels": {"region": "us-east-1"}
 }
 ```
 
