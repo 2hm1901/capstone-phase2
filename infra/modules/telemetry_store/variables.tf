@@ -24,6 +24,12 @@ variable "telemetry_dlq_name" {
   default     = null
 }
 
+variable "enable_writer_event_source_mapping" {
+  description = "Whether to create the SQS event source mapping from the real telemetry queue to Writer Lambda."
+  type        = bool
+  default     = false
+}
+
 variable "amp_workspace_alias" {
   description = "Alias for the AMP workspace used as the primary telemetry store."
   type        = string
@@ -32,6 +38,12 @@ variable "amp_workspace_alias" {
 variable "writer_source_dir" {
   description = "Path to telemetry writer Lambda source directory."
   type        = string
+}
+
+variable "writer_archive_output_path" {
+  description = "Path for the generated telemetry writer Lambda zip archive."
+  type        = string
+  default     = null
 }
 
 variable "writer_runtime" {

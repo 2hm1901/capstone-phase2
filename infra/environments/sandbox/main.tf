@@ -35,6 +35,8 @@ module "telemetry_store" {
   telemetry_queue_url = var.telemetry_queue_url
   telemetry_dlq_name  = var.telemetry_dlq_name
 
+  enable_writer_event_source_mapping = var.enable_writer_event_source_mapping
+
   writer_source_dir                     = "${path.module}/../../../src/writer"
   batch_size                            = var.writer_batch_size
   maximum_batching_window_in_seconds    = var.writer_maximum_batching_window_seconds

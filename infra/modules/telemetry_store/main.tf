@@ -15,7 +15,7 @@ data "aws_region" "current" {}
 data "archive_file" "writer" {
   type        = "zip"
   source_dir  = var.writer_source_dir
-  output_path = "${path.module}/telemetry-writer.zip"
+  output_path = coalesce(var.writer_archive_output_path, "${path.root}/.terraform/telemetry-writer.zip")
 }
 
 data "aws_iam_policy_document" "writer_assume_role" {
@@ -141,6 +141,8 @@ resource "aws_lambda_function" "writer" {
 }
 
 resource "aws_lambda_event_source_mapping" "telemetry_queue" {
+  count = var.enable_writer_event_source_mapping ? 1 : 0
+
   event_source_arn                   = var.telemetry_queue_arn
   function_name                      = aws_lambda_function.writer.arn
   batch_size                         = var.batch_size

@@ -36,19 +36,25 @@ variable "ai_engine_alb_ingress_cidrs" {
 variable "telemetry_queue_arn" {
   description = "Temporary telemetry queue ARN placeholder. Replace with module.telemetry_ingest output after that module is merged."
   type        = string
-  default     = "arn:aws:sqs:us-west-2:894597652722:cdo08-sandbox-telemetry-queue-placeholder"
+  default     = "arn:aws:sqs:us-east-1:894597652722:cdo08-sandbox-telemetry-queue-placeholder"
 }
 
 variable "telemetry_queue_url" {
   description = "Temporary telemetry queue URL placeholder. Replace with module.telemetry_ingest output after that module is merged."
   type        = string
-  default     = "https://sqs.us-west-2.amazonaws.com/894597652722/cdo08-sandbox-telemetry-queue-placeholder"
+  default     = "https://sqs.us-east-1.amazonaws.com/894597652722/cdo08-sandbox-telemetry-queue-placeholder"
 }
 
 variable "telemetry_dlq_name" {
   description = "Temporary telemetry DLQ name placeholder for alarm wiring. Replace with module.telemetry_ingest output after that module is merged."
   type        = string
   default     = "cdo08-sandbox-telemetry-dlq-placeholder"
+}
+
+variable "enable_writer_event_source_mapping" {
+  description = "Enable SQS to Writer Lambda event source mapping only after the real telemetry queue output is available."
+  type        = bool
+  default     = false
 }
 
 variable "writer_batch_size" {
