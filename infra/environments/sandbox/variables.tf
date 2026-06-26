@@ -132,3 +132,8 @@ variable "alarm_fallback_count_period_secs" {
   type        = number
   default     = 300
 }
+variable "reviewer_principal_arns" {
+  description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
+  type        = list(string)
+  default     = []
+}

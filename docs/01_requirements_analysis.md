@@ -52,7 +52,7 @@ Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-se
 
 ## 5. Constraints
 
-- **Cloud:** AWS-only, single region; `ap-southeast-1` là đề xuất chờ xác nhận. DR multi-region chỉ design-only.
+- **Cloud:** AWS-only, single region `us-east-1`. DR multi-region chỉ design-only.
 - **Timeline:** Contract freeze T5 W11; EOD T6 W11 cần base infra; W12 tích hợp real engine, test và hoàn tất evidence. Code freeze 08:00 T5 W12, 02/07/2026.
 - **Data and scope:** Không ingest PII, không dùng production traffic hoặc historical 6-month data. Grafana annotation thay UI mới.
 - **Cost:** Resource có tags, budget alert và teardown/runbook; không vượt rough cap $200/tháng.
@@ -63,7 +63,7 @@ Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-se
 - [ ] Ba tier-1 service và metric priority cuối cùng? — *Client, EOD T2 W11.*
 - [ ] `tenant_id` là customer/account isolation hay logical service isolation? — *Client + AI, trước contract freeze.*
 - [ ] Telemetry granularity, demo volume, late-event/order semantics? — *Telemetry Contract, EOD T4 W11.*
-- [x] AI request window, auth, timeout/retry và error mapping? — *AI API Contract v1.0: window ≥120 phút, IAM SigV4, 400/401/429/503 mapping.*
+- [x] AI request window, auth, timeout/retry và error mapping? — *AI API Contract v1.0: window ≥120 phút, IAM SigV4, 400/401/422/429/503 mapping.*
 - [ ] Audit retention, alert routing, evidence-link format? — *Client/AI, trước T5 W11.*
 - [ ] Static thresholds cho mỗi metric và fallback alert receiver? — *Client/AI, trước W12 integration.*
 - [ ] AWS account, VPC và existing Grafana constraints? — *Mentor/Client, trước Terraform apply.*

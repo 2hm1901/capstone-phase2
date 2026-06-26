@@ -49,7 +49,7 @@
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `signal_window` | array | ✓ | Time-series datapoints (BẮT BUỘC chứa dữ liệu của ≥ 120 phút gần nhất để AI có đủ context dự báo (Test window ≥ 2h). Thiếu -> 400 Bad Request) |
+| `signal_window` | array | ✓ | Time-series datapoints (BẮT BUỘC chứa dữ liệu của ≥ 120 phút gần nhất để AI có đủ context dự báo (Test window ≥ 2h). Thiếu/sai schema -> 422 Unprocessable Entity) |
 | `signal_window[].ts` | RFC3339 | ✓ | Event timestamp UTC |
 | `signal_window[].tenant_id` | string | ✓ | Tenant identifier (Bắt buộc để đảm bảo multi-tenant isolation, phải match với header X-Tenant-Id) |
 | `signal_window[].service_id` | string | ✓ | Service identifier (Bắt buộc để mapping với per-service baseline) |
@@ -84,7 +84,7 @@
 |---|---|---|
 | `anomaly` | bool | True nếu detect anomaly |
 | `severity` | float 0.0-1.0 | Severity score |
-| `recommendation.action_verb` | enum | `["SCALE_UP", "INVESTIGATE"]` |
+| `recommendation.action_verb` | enum | `["SCALE_UP", "SCALE_DOWN", "RETIRE", "ROLLBACK", "INVESTIGATE"]` |
 | `recommendation.target` | string | Target resource (e.g., "payment-gw ECS Service") |
 | `recommendation.from_to` | string | State transition (e.g., "3 tasks -> 5 tasks") |
 | `recommendation.confidence` | float 0.0-1.0 | Model confidence - CDO dùng cho gating |
@@ -110,6 +110,8 @@
 }
 ```
 
+> **⚠️ Tránh nhầm lẫn "Scale":** `from_to` (vd `Current -> +2 Tasks`) là **khuyến nghị AI gửi CDO** về service mà CDO đang vận hành — KHÔNG phải số task của bản thân AI Engine. Việc AI Engine tự autoscale 2→4 Fargate tasks (mục 9 spec) là chuyện hạ tầng nội bộ, hoàn toàn tách biệt với `action_verb`/`from_to` của recommendation. `action_verb` chỉ nhận 1 trong 5 giá trị enum ở trên.
+
 ### Audit Log Schema (Internal AI Engine)
 
 Mỗi request tới `POST /v1/predict` bắt buộc phải được ghi log (Audit) với tối thiểu 6 trường dữ liệu, lưu trữ **Encrypted at Rest** (KMS AWSManagedKey) với **Retention 1 năm** (365 ngày, theo sàn PCI-DSS/SOC2; archive dài hạn hơn → S3 + Glacier):
@@ -132,7 +134,8 @@ Mỗi request tới `POST /v1/predict` bắt buộc phải được ghi log (Aud
 
 | Code | Meaning | CDO action |
 |---|---|---|
-| `400` | Invalid input schema | Fix client code, KHÔNG retry |
-| `401` | Auth failed | Refresh credential, retry once |
-| `429` | Rate-limited | Exponential backoff (1s → 2s → 4s ...) |
+| `400` | Well-formed nhưng input không hợp lệ (tenant_id datapoint ≠ header, data gap > 1 phút) | Fix client data, KHÔNG retry |
+| `401` | Thiếu/sai auth — thiếu `X-Tenant-Id` hoặc SigV4 fail | Refresh credential, retry once |
+| `422` | Schema/type validation fail — thiếu field bắt buộc, sai kiểu, `signal_window` < 120 điểm | Fix client code, KHÔNG retry |
+| `429` | Rate-limited (> 600 req/phút/tenant) | Exponential backoff (1s → 2s → 4s ...) |
 | `503` | AI engine unavailable | Fallback to rule-based alert (CDO **bắt buộc** có fallback path) |
