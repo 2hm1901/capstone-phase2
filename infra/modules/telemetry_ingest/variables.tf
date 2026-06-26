@@ -20,6 +20,11 @@ variable "lambda_package_path" {
   type        = string
 }
 
+variable "lambda_role_arn" {
+  description = "IAM role ARN for Lambda Ingest. Owned by the security_baseline module."
+  type        = string
+}
+
 variable "lambda_timeout" {
   description = "Lambda ingest timeout in seconds"
   type        = number

@@ -38,12 +38,6 @@ variable "audit_kms_key_arn" {
   default     = null
 }
 
-variable "audit_reader_principal_arns" {
-  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role (fail-safe: no implicit account-root access)."
-  type        = list(string)
-  default     = []
-}
-
 variable "grafana_secret_arn" {
   description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Set null to defer until the security module merges. This module never creates or stores the token."
   type        = string

@@ -35,7 +35,7 @@ output "writer_lambda_arn" {
 
 output "writer_role_arn" {
   description = "Telemetry Writer Lambda IAM role ARN."
-  value       = aws_iam_role.writer.arn
+  value       = var.writer_role_arn
 }
 
 output "writer_log_group_name" {

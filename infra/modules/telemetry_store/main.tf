@@ -18,17 +18,6 @@ data "archive_file" "writer" {
   output_path = coalesce(var.writer_archive_output_path, "${path.root}/.terraform/telemetry-writer.zip")
 }
 
-data "aws_iam_policy_document" "writer_assume_role" {
-  statement {
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-  }
-}
-
 resource "aws_prometheus_workspace" "this" {
   alias = var.amp_workspace_alias
 
@@ -48,64 +37,10 @@ resource "aws_cloudwatch_log_group" "writer" {
   })
 }
 
-resource "aws_iam_role" "writer" {
-  name               = "${var.name_prefix}-telemetry-writer-role"
-  assume_role_policy = data.aws_iam_policy_document.writer_assume_role.json
-
-  tags = merge(var.tags, {
-    Name      = "${var.name_prefix}-telemetry-writer-role"
-    Component = "telemetry-writer"
-  })
-}
-
-data "aws_iam_policy_document" "writer" {
-  statement {
-    sid = "ReadTelemetryQueue"
-    actions = [
-      "sqs:ReceiveMessage",
-      "sqs:DeleteMessage",
-      "sqs:GetQueueAttributes",
-      "sqs:ChangeMessageVisibility"
-    ]
-    resources = [var.telemetry_queue_arn]
-  }
-
-  statement {
-    sid       = "RemoteWriteToAmpWorkspace"
-    actions   = ["aps:RemoteWrite"]
-    resources = [aws_prometheus_workspace.this.arn]
-  }
-
-  statement {
-    sid = "WriteLambdaLogs"
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents"
-    ]
-    resources = ["${aws_cloudwatch_log_group.writer.arn}:*"]
-  }
-}
-
-resource "aws_iam_policy" "writer" {
-  name        = "${var.name_prefix}-telemetry-writer-policy"
-  description = "Least-privilege policy for telemetry writer SQS consume and AMP remote-write."
-  policy      = data.aws_iam_policy_document.writer.json
-
-  tags = merge(var.tags, {
-    Name      = "${var.name_prefix}-telemetry-writer-policy"
-    Component = "telemetry-writer"
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "writer" {
-  role       = aws_iam_role.writer.name
-  policy_arn = aws_iam_policy.writer.arn
-}
-
 resource "aws_lambda_function" "writer" {
   function_name = local.writer_function_name
   description   = "Telemetry Writer: consumes validated telemetry events from SQS and remote-writes metrics into AMP."
-  role          = aws_iam_role.writer.arn
+  role          = var.writer_role_arn
   runtime       = var.writer_runtime
   handler       = var.writer_handler
 
@@ -135,8 +70,7 @@ resource "aws_lambda_function" "writer" {
   })
 
   depends_on = [
-    aws_cloudwatch_log_group.writer,
-    aws_iam_role_policy_attachment.writer
+    aws_cloudwatch_log_group.writer
   ]
 }
 
@@ -189,7 +123,7 @@ resource "aws_cloudwatch_metric_alarm" "writer_duration" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "sqs_backlog" {
-  alarm_name          = "${var.name_prefix}-telemetry-queue-backlog"
+  alarm_name          = "${var.name_prefix}-writer-telemetry-queue-backlog"
   alarm_description   = "Telemetry queue has visible backlog."
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateNumberOfMessagesVisible"
@@ -208,7 +142,7 @@ resource "aws_cloudwatch_metric_alarm" "sqs_backlog" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "sqs_queue_age" {
-  alarm_name          = "${var.name_prefix}-telemetry-queue-age"
+  alarm_name          = "${var.name_prefix}-writer-telemetry-queue-age"
   alarm_description   = "Oldest telemetry queue message age threatens prediction lead time."
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateAgeOfOldestMessage"
@@ -229,7 +163,7 @@ resource "aws_cloudwatch_metric_alarm" "sqs_queue_age" {
 resource "aws_cloudwatch_metric_alarm" "dlq_visible_messages" {
   count = var.telemetry_dlq_name == null ? 0 : 1
 
-  alarm_name          = "${var.name_prefix}-telemetry-dlq-visible-messages"
+  alarm_name          = "${var.name_prefix}-writer-telemetry-dlq-visible-messages"
   alarm_description   = "Telemetry DLQ has messages requiring triage."
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateNumberOfMessagesVisible"

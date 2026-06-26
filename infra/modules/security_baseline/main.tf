@@ -379,6 +379,7 @@ data "aws_iam_policy_document" "writer" {
       "sqs:ReceiveMessage",
       "sqs:DeleteMessage",
       "sqs:DeleteMessageBatch",
+      "sqs:ChangeMessageVisibility",
       "sqs:GetQueueAttributes"
     ]
     resources = ["arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.name_prefix}-*"]

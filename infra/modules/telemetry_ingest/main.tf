@@ -36,72 +36,6 @@ resource "aws_sqs_queue" "telemetry_queue" {
 }
 
 
-# Lambda Ingest IAM Role
-
-resource "aws_iam_role" "ingest_lambda_role" {
-  name = "${var.name_prefix}-ingest-lambda-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
-}
-
-# Lambda Ingest IAM Policy
-# Least privilege:
-# - SendMessage only to telemetry queue
-# - Write CloudWatch Logs
-# - No ReceiveMessage
-# - No DeleteMessage
-# - No AMP/DynamoDB/Secrets/Grafana/AI permission
-
-resource "aws_iam_role_policy" "ingest_lambda_policy" {
-  name = "${var.name_prefix}-ingest-lambda-policy"
-  role = aws_iam_role.ingest_lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowSendMessageToTelemetryQueue"
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage"
-        ]
-        Resource = aws_sqs_queue.telemetry_queue.arn
-      },
-      {
-        Sid    = "AllowCreateLogGroup"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "AllowWriteLambdaLogs"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = [
-          "${aws_cloudwatch_log_group.ingest_lambda.arn}:*"
-        ]
-      }
-    ]
-  })
-}
-
-
 # CloudWatch Log Group for Lambda Ingest
 
 resource "aws_cloudwatch_log_group" "ingest_lambda" {
@@ -114,7 +48,7 @@ resource "aws_cloudwatch_log_group" "ingest_lambda" {
 resource "aws_lambda_function" "ingest" {
   function_name = "${var.name_prefix}-ingest"
 
-  role    = aws_iam_role.ingest_lambda_role.arn
+  role    = var.lambda_role_arn
   handler = "index.handler"
   runtime = "python3.11"
 
@@ -134,8 +68,7 @@ resource "aws_lambda_function" "ingest" {
   }
 
   depends_on = [
-    aws_cloudwatch_log_group.ingest_lambda,
-    aws_iam_role_policy.ingest_lambda_policy
+    aws_cloudwatch_log_group.ingest_lambda
   ]
 }
 

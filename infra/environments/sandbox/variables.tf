@@ -33,24 +33,6 @@ variable "ai_engine_alb_ingress_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
-variable "telemetry_queue_arn" {
-  description = "Temporary telemetry queue ARN placeholder. Replace with module.telemetry_ingest output after that module is merged."
-  type        = string
-  default     = "arn:aws:sqs:us-east-1:894597652722:cdo08-sandbox-telemetry-queue-placeholder"
-}
-
-variable "telemetry_queue_url" {
-  description = "Temporary telemetry queue URL placeholder. Replace with module.telemetry_ingest output after that module is merged."
-  type        = string
-  default     = "https://sqs.us-east-1.amazonaws.com/894597652722/cdo08-sandbox-telemetry-queue-placeholder"
-}
-
-variable "telemetry_dlq_name" {
-  description = "Temporary telemetry DLQ name placeholder for alarm wiring. Replace with module.telemetry_ingest output after that module is merged."
-  type        = string
-  default     = "cdo08-sandbox-telemetry-dlq-placeholder"
-}
-
 variable "enable_writer_event_source_mapping" {
   description = "Enable SQS to Writer Lambda event source mapping only after the real telemetry queue output is available."
   type        = bool
@@ -77,12 +59,6 @@ variable "audit_ttl_enabled" {
   description = "Enable DynamoDB TTL on the expires_at attribute. Set false to defer TTL activation."
   type        = bool
   default     = true
-}
-
-variable "audit_reader_principal_arns" {
-  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role."
-  type        = list(string)
-  default     = []
 }
 
 variable "create_grafana_workspace" {
@@ -141,12 +117,6 @@ variable "grafana_workspace_name" {
 
 variable "grafana_datasource_uid" {
   description = "Existing Grafana datasource UID for the AMP workspace. Set null to defer datasource wiring until the AMP module merges."
-  type        = string
-  default     = null
-}
-
-variable "amp_workspace_id" {
-  description = "Amazon Managed Prometheus workspace ID consumed to configure a Grafana AMP datasource. Set null to defer datasource wiring until the AMP module merges."
   type        = string
   default     = null
 }
