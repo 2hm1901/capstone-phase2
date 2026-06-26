@@ -38,6 +38,18 @@ variable "audit_kms_key_arn" {
   default     = null
 }
 
+variable "audit_reader_principal_arns" {
+  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role (fail-safe: no implicit account-root access)."
+  type        = list(string)
+  default     = []
+}
+
+variable "grafana_secret_arn" {
+  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Set null to defer until the security module merges. This module never creates or stores the token."
+  type        = string
+  default     = null
+}
+
 variable "grafana_workspace_id" {
   description = "Existing Amazon Managed Grafana workspace ID for reference mode. Set null to create a new workspace."
   type        = string
@@ -60,12 +72,6 @@ variable "amp_workspace_id" {
   description = "Amazon Managed Prometheus workspace ID consumed to configure a Grafana AMP datasource. Set null to defer datasource wiring until the AMP module merges."
   type        = string
   default     = null
-}
-
-variable "grafana_secret_name" {
-  description = "Secrets Manager secret name for the Grafana service-account token. Value is put manually after apply; Terraform only creates the placeholder."
-  type        = string
-  default     = "cdo08/grafana"
 }
 
 variable "alarm_audit_write_error_threshold" {

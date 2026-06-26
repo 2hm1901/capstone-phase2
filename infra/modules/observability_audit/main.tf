@@ -2,13 +2,14 @@ data "aws_caller_identity" "current" {}
 
 locals {
   audit_table_name       = coalesce(var.audit_table_name, "${var.name_prefix}-audit")
-  grafana_secret_name    = var.grafana_secret_name
   grafana_workspace_name = coalesce(var.grafana_workspace_name, "${var.name_prefix}-grafana")
+  create_audit_reader    = length(var.audit_reader_principal_arns) > 0
 }
 
 # -----------------------------------------------------------------------------
 # DynamoDB audit table
-# Partition key: tenant_id#service_id (tenant isolation via LeadingKeys)
+# Partition key: tenant_id#service_id (logical tenant isolation enforced at
+# the ingest/application layer, not via DynamoDB IAM conditions).
 # Sort key: prediction_id (lookup a single prediction/fallback record)
 # GSI1: correlation_id -> prediction_id for E2E trace lookup
 # TTL: expires_at (epoch seconds), retention var.audit_retention_days
@@ -66,8 +67,11 @@ resource "aws_dynamodb_table" "audit" {
 
 # -----------------------------------------------------------------------------
 # IAM writer role for audit table (Prediction / Fallback Lambda)
-# PutItem only, scoped to the audit table ARN, LeadingKeys enforces tenant
-# isolation so a writer cannot read or write across tenants.
+# PutItem only, scoped to the audit table ARN. Tenant isolation is enforced at
+# the ingest/application layer (X-Tenant-Id validation per docs 4.1), not via
+# DynamoDB LeadingKeys conditions, because the PK format (tenant_id#service_id)
+# is not known to IAM policy authoring and a wrong LeadingKeys pattern would
+# silently deny legitimate writes.
 # Writer Lambda (telemetry) does NOT receive this role.
 # -----------------------------------------------------------------------------
 data "aws_iam_policy_document" "audit_writer_assume" {
@@ -89,18 +93,10 @@ resource "aws_iam_role" "audit_writer" {
 
 data "aws_iam_policy_document" "audit_writer" {
   statement {
-    sid    = "PutAuditItem"
-    effect = "Allow"
-    actions = [
-      "dynamodb:PutItem"
-    ]
+    sid     = "PutAuditItem"
+    effect  = "Allow"
+    actions = ["dynamodb:PutItem"]
     resources = [aws_dynamodb_table.audit.arn]
-
-    condition {
-      test     = "ForAllValues:StringLike"
-      variable = "dynamodb:LeadingKeys"
-      values   = ["${var.name_prefix}-*"]
-    }
   }
 
   statement {
@@ -118,32 +114,36 @@ resource "aws_iam_role_policy" "audit_writer" {
 }
 
 # -----------------------------------------------------------------------------
-# IAM reviewer role for audit table (Mentor / debug)
-# Query + GetItem only, LeadingKeys enforces tenant scoping.
-# No Scan, no Delete, no PutItem.
+# IAM reader role for audit table (Mentor / debug)
+# Created only when var.audit_reader_principal_arns is non-empty; those ARNs are
+# the only principals allowed to assume the role. When the list is empty the
+# reader role is not created and the output is null (fail-safe: no implicit
+# account-root access).
+# Query + GetItem only. No Scan, no Delete, no PutItem.
 # -----------------------------------------------------------------------------
 data "aws_iam_policy_document" "audit_reader_assume" {
+  count = local.create_audit_reader ? 1 : 0
+
   statement {
     effect  = "Allow"
     actions = ["sts:AssumeRole"]
     principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-    principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+      identifiers = var.audit_reader_principal_arns
     }
   }
 }
 
 resource "aws_iam_role" "audit_reader" {
-  name               = "${var.name_prefix}-audit-reader-role"
-  assume_role_policy = data.aws_iam_policy_document.audit_reader_assume.json
-  tags               = merge(var.tags, { Name = "${var.name_prefix}-audit-reader-role" })
+  count  = local.create_audit_reader ? 1 : 0
+  name   = "${var.name_prefix}-audit-reader-role"
+  assume_role_policy = data.aws_iam_policy_document.audit_reader_assume[0].json
+  tags   = merge(var.tags, { Name = "${var.name_prefix}-audit-reader-role" })
 }
 
 data "aws_iam_policy_document" "audit_reader" {
+  count = local.create_audit_reader ? 1 : 0
+
   statement {
     sid    = "QueryGetAudit"
     effect = "Allow"
@@ -155,12 +155,6 @@ data "aws_iam_policy_document" "audit_reader" {
       aws_dynamodb_table.audit.arn,
       "${aws_dynamodb_table.audit.arn}/index/*"
     ]
-
-    condition {
-      test     = "ForAllValues:StringLike"
-      variable = "dynamodb:LeadingKeys"
-      values   = ["${var.name_prefix}-*"]
-    }
   }
 
   statement {
@@ -172,9 +166,10 @@ data "aws_iam_policy_document" "audit_reader" {
 }
 
 resource "aws_iam_role_policy" "audit_reader" {
+  count  = local.create_audit_reader ? 1 : 0
   name   = "${var.name_prefix}-audit-reader-policy"
-  role   = aws_iam_role.audit_reader.id
-  policy = data.aws_iam_policy_document.audit_reader.json
+  role   = aws_iam_role.audit_reader[0].id
+  policy = data.aws_iam_policy_document.audit_reader[0].json
 }
 
 # -----------------------------------------------------------------------------
@@ -182,8 +177,10 @@ resource "aws_iam_role_policy" "audit_reader" {
 # Two modes:
 #   1. create_grafana_workspace = true  -> create aws_grafana_workspace
 #   2. create_grafana_workspace = false  -> reference mode, use var.grafana_workspace_id
-# Token is NEVER stored in Terraform state. Only a Secrets Manager placeholder
-# is created; the Tech Lead puts the actual token manually after apply.
+# This module does NOT own the Grafana service-account token secret. The secret
+# is created by the security module (owner: Quyết) and passed in as
+# var.grafana_secret_arn, so Terraform state never holds the token and there is
+# no ownership/duplicate conflict with the security module.
 # -----------------------------------------------------------------------------
 resource "aws_grafana_workspace" "this" {
   count                    = var.create_grafana_workspace ? 1 : 0
@@ -202,19 +199,6 @@ resource "aws_grafana_workspace" "this" {
 
 locals {
   grafana_workspace_id = var.create_grafana_workspace ? aws_grafana_workspace.this[0].id : var.grafana_workspace_id
-}
-
-# Secrets Manager placeholder for the Grafana service-account token.
-# Value is put manually by the Tech Lead after Terraform apply.
-resource "aws_secretsmanager_secret" "grafana_token" {
-  name                    = local.grafana_secret_name
-  description             = "Grafana service-account token for annotation publisher. Value is put manually after apply."
-  recovery_window_in_days = 30
-
-  tags = merge(var.tags, {
-    Name = local.grafana_secret_name
-    Role = "grafana-annotation-secret"
-  })
 }
 
 # -----------------------------------------------------------------------------

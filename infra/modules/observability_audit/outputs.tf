@@ -14,8 +14,8 @@ output "audit_writer_role_arn" {
 }
 
 output "audit_reader_role_arn" {
-  description = "IAM role ARN for audit readers (Mentor/debug). Query + GetItem only, no Scan/Delete/PutItem."
-  value       = aws_iam_role.audit_reader.arn
+  description = "IAM role ARN for audit readers (Mentor/debug). Query + GetItem only, no Scan/Delete/PutItem. Null when audit_reader_principal_arns is empty."
+  value       = local.create_audit_reader ? aws_iam_role.audit_reader[0].arn : null
 }
 
 output "grafana_workspace_id" {
@@ -24,13 +24,8 @@ output "grafana_workspace_id" {
 }
 
 output "grafana_secret_arn" {
-  description = "Secrets Manager secret ARN holding the Grafana service-account token. Value is put manually after apply."
-  value       = aws_secretsmanager_secret.grafana_token.arn
-}
-
-output "grafana_secret_name" {
-  description = "Secrets Manager secret name holding the Grafana service-account token."
-  value       = aws_secretsmanager_secret.grafana_token.name
+  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Null when deferred."
+  value       = var.grafana_secret_arn
 }
 
 output "annotation_audit_log_group_name" {

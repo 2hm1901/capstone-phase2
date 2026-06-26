@@ -4,7 +4,7 @@ terraform {
   backend "s3" {
     bucket       = "cdo08-tf-state-894597652722-us-west-2"
     key          = "cdo08/sandbox/terraform.tfstate"
-    region       = "us-west-2"
+    region       = "us-east-1"
     encrypt      = true
     use_lockfile = true
   }

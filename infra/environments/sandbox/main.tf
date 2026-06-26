@@ -83,12 +83,14 @@ module "observability_audit" {
   audit_ttl_enabled    = var.audit_ttl_enabled
   audit_kms_key_arn    = var.audit_kms_key_arn
 
+  audit_reader_principal_arns = var.audit_reader_principal_arns
+
   create_grafana_workspace = var.create_grafana_workspace
   grafana_workspace_id     = var.grafana_workspace_id
   grafana_workspace_name   = var.grafana_workspace_name
   grafana_datasource_uid   = var.grafana_datasource_uid
   amp_workspace_id         = var.amp_workspace_id
-  grafana_secret_name      = var.grafana_secret_name
+  grafana_secret_arn       = var.grafana_secret_arn
 
   alarm_audit_write_error_threshold  = var.alarm_audit_write_error_threshold
   alarm_annotation_error_period_secs = var.alarm_annotation_error_period_secs
@@ -123,7 +125,7 @@ output "grafana_workspace_id" {
 }
 
 output "grafana_secret_arn" {
-  description = "Secrets Manager secret ARN holding the Grafana service-account token."
+  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Null when deferred."
   value       = module.observability_audit.grafana_secret_arn
 }
 

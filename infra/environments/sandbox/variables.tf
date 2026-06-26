@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS Region for the single CDO08 sandbox environment."
   type        = string
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 variable "workload_vpc_cidr" {
@@ -61,6 +61,12 @@ variable "audit_kms_key_arn" {
   default     = null
 }
 
+variable "audit_reader_principal_arns" {
+  description = "List of IAM principal ARNs allowed to assume the audit-reader role. Leave empty to skip creating the reader role."
+  type        = list(string)
+  default     = []
+}
+
 variable "create_grafana_workspace" {
   description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
   type        = bool
@@ -91,10 +97,10 @@ variable "amp_workspace_id" {
   default     = null
 }
 
-variable "grafana_secret_name" {
-  description = "Secrets Manager secret name for the Grafana service-account token. Value is put manually after apply."
+variable "grafana_secret_arn" {
+  description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Set null to defer until the security module merges."
   type        = string
-  default     = "cdo08/grafana"
+  default     = null
 }
 
 variable "alarm_audit_write_error_threshold" {
