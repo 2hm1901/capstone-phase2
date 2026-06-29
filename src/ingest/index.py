@@ -20,12 +20,6 @@ def response(status_code, body):
 
 
 def handler(event, context):
-    correlation_id = (
-        event.get("headers", {}).get("x-correlation-id")
-        or event.get("headers", {}).get("X-Correlation-Id")
-        or str(uuid.uuid4())
-    )
-
     tenant_header = (
         event.get("headers", {}).get("x-tenant-id")
         or event.get("headers", {}).get("X-Tenant-Id")
@@ -34,7 +28,19 @@ def handler(event, context):
     try:
         body = json.loads(event.get("body") or "{}")
     except json.JSONDecodeError:
+        correlation_id = (
+            event.get("headers", {}).get("x-correlation-id")
+            or event.get("headers", {}).get("X-Correlation-Id")
+            or str(uuid.uuid4())
+        )
         return response(400, {"error": "invalid_json", "correlation_id": correlation_id})
+
+    correlation_id = (
+        body.get("correlation_id")
+        or event.get("headers", {}).get("x-correlation-id")
+        or event.get("headers", {}).get("X-Correlation-Id")
+        or str(uuid.uuid4())
+    )
 
     required_fields = ["ts", "tenant_id", "service_id", "metric_type", "value"]
     missing = [field for field in required_fields if field not in body]

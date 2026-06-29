@@ -3,6 +3,16 @@ output "api_endpoint" {
   value       = "${aws_apigatewayv2_api.telemetry.api_endpoint}/${var.api_stage}/v1/telemetry"
 }
 
+output "api_execution_arn" {
+  description = "API Gateway execution ARN for IAM invoke scoping"
+  value       = aws_apigatewayv2_api.telemetry.execution_arn
+}
+
+output "api_invoke_arn" {
+  description = "Telemetry ingest POST route ARN for execute-api:Invoke permissions"
+  value       = "${aws_apigatewayv2_api.telemetry.execution_arn}/${var.api_stage}/POST/v1/telemetry"
+}
+
 output "auth_mode" {
   description = "Telemetry API authentication mode"
   value       = var.auth_mode
