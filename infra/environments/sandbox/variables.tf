@@ -76,7 +76,7 @@ variable "generator_log_retention_days" {
 variable "enable_prediction" {
   description = "Enable Prediction/Scheduler/Fail-open resources. Keep false until Lambda packages and AI endpoint are ready."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_writer_event_source_mapping" {

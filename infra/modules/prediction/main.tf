@@ -3,6 +3,7 @@ locals {
   serving_adapter_lambda_name = "${var.name_prefix}-serving-adapter-lambda"
   fallback_lambda_name        = "${var.name_prefix}-fallback-lambda"
 }
+data "aws_caller_identity" "current" {}
 
 data "archive_file" "prediction_lambda" {
   count       = var.enable_prediction ? 1 : 0
@@ -176,7 +177,7 @@ resource "aws_lambda_permission" "allow_scheduler_invoke" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.prediction_lambda[0].function_name
   principal     = "scheduler.amazonaws.com"
-  source_arn    = "arn:aws:scheduler:${var.aws_region}:*:schedule/default/${var.name_prefix}-predict-*"
+  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/default/${var.name_prefix}-predict-*"
 }
 
 # CloudWatch Alarms

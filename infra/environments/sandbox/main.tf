@@ -88,6 +88,25 @@ module "prediction" {
   tags = local.common_tags
 }
 
+module "ai_engine" {
+  source = "../../modules/ai_engine"
+
+  name_prefix            = local.name_prefix
+  aws_region             = var.aws_region
+  vpc_id                 = module.networking.ai_engine_vpc_id
+  public_subnet_ids      = module.networking.ai_engine_public_subnet_ids
+  private_subnet_ids     = module.networking.ai_engine_private_subnet_ids
+  alb_security_group_id  = module.networking.ai_engine_alb_security_group_id
+  task_security_group_id = module.networking.ai_engine_task_security_group_id
+  ai_engine_role_arn     = module.security_baseline.ai_engine_role_arn
+  ai_engine_ecr_repo_url = module.security_baseline.ai_engine_ecr_repo_url
+  ai_engine_image_tag    = "latest" # Thay thế bằng tag thật của AI team
+  baseline_bucket_name   = module.security_baseline.baseline_bucket_name
+  app_log_group_name     = module.security_baseline.ai_engine_app_log_group_name
+  audit_log_group_name   = module.security_baseline.ai_engine_audit_log_group_name
+  tags                   = local.common_tags
+}
+
 data "archive_file" "ingest" {
   type        = "zip"
   source_dir  = "${path.module}/../../../src/ingest"
