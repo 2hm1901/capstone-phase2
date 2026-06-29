@@ -102,6 +102,7 @@ module "telemetry_ingest" {
   auth_mode           = "IAM"
   lambda_package_path = data.archive_file.ingest.output_path
   lambda_role_arn     = module.security_baseline.ingest_role_arn
+  lambda_role_name    = module.security_baseline.ingest_role_name
 
   lambda_timeout              = 10
   lambda_memory               = 256
@@ -124,6 +125,11 @@ output "ingest_api_endpoint" {
 output "ingest_auth_mode" {
   description = "Telemetry ingest API authentication mode."
   value       = module.telemetry_ingest.auth_mode
+}
+
+output "ingest_api_invoke_arn" {
+  description = "Telemetry ingest POST route ARN for execute-api:Invoke IAM policies."
+  value       = module.telemetry_ingest.api_invoke_arn
 }
 
 output "ingest_lambda_name" {
@@ -192,6 +198,9 @@ module "telemetry_store" {
 
   tags = local.common_tags
 }
+
+
+
 
 output "workload_vpc_id" {
   description = "ID of the synthetic workload/services VPC."

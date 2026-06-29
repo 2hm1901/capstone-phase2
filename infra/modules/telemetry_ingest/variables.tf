@@ -25,6 +25,12 @@ variable "lambda_role_arn" {
   type        = string
 }
 
+variable "lambda_role_name" {
+  description = "IAM role name for Lambda Ingest. Owned by the security_baseline module."
+  type        = string
+}
+
+
 variable "lambda_timeout" {
   description = "Lambda ingest timeout in seconds"
   type        = number
@@ -88,7 +94,7 @@ variable "api_throttling_rate_limit" {
 }
 
 variable "ingest_reserved_concurrency" {
-  description = "Reserved concurrency for Lambda Ingest. Set null to use unreserved account concurrency."
+  description = "Reserved concurrency for the ingest Lambda. Null leaves it unreserved."
   type        = number
   default     = null
 }

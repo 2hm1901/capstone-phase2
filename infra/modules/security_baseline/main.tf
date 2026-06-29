@@ -342,12 +342,9 @@ resource "aws_iam_role" "ingest" {
 
 data "aws_iam_policy_document" "ingest" {
   statement {
-    effect = "Allow"
-    actions = [
-      "sqs:SendMessage",
-      "sqs:SendMessageBatch"
-    ]
-    resources = ["arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.name_prefix}-*"]
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = ["arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${var.name_prefix}-telemetry"]
   }
 }
 
