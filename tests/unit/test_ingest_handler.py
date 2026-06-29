@@ -120,3 +120,83 @@ def test_handler_rejects_invalid_json(monkeypatch):
 
     assert response["statusCode"] == 400
     assert json.loads(response["body"])["error"] == "invalid_json"
+
+
+
+def test_handler_rejects_missing_schema_version(monkeypatch):
+    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+
+    payload = valid_payload()
+    payload.pop("schema_version")
+
+    response = ingest_handler.handler(
+        make_event(payload, headers={"X-Tenant-Id": "tenant-cdo08-demo"}),
+        None,
+    )
+
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert body["error"] == "missing_required_fields"
+    assert "schema_version" in body["fields"]
+
+
+def test_handler_rejects_missing_correlation_id(monkeypatch):
+    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+
+    payload = valid_payload()
+    payload.pop("correlation_id")
+
+    response = ingest_handler.handler(
+        make_event(payload, headers={"X-Tenant-Id": "tenant-cdo08-demo"}),
+        None,
+    )
+
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert body["error"] == "missing_required_fields"
+    assert "correlation_id" in body["fields"]
+
+
+def test_handler_rejects_labels_not_object(monkeypatch):
+    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+
+    response = ingest_handler.handler(
+        make_event(
+            valid_payload(labels="not-object"),
+            headers={"X-Tenant-Id": "tenant-cdo08-demo"},
+        ),
+        None,
+    )
+
+    assert response["statusCode"] == 400
+    assert json.loads(response["body"])["error"] == "invalid_labels"
+
+
+def test_handler_rejects_value_not_number(monkeypatch):
+    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+
+    response = ingest_handler.handler(
+        make_event(
+            valid_payload(value="450.5"),
+            headers={"X-Tenant-Id": "tenant-cdo08-demo"},
+        ),
+        None,
+    )
+
+    assert response["statusCode"] == 400
+    assert json.loads(response["body"])["error"] == "invalid_value"
+
+
+def test_handler_rejects_invalid_timestamp(monkeypatch):
+    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+
+    response = ingest_handler.handler(
+        make_event(
+            valid_payload(ts="not-a-timestamp"),
+            headers={"X-Tenant-Id": "tenant-cdo08-demo"},
+        ),
+        None,
+    )
+
+    assert response["statusCode"] == 400
+    assert json.loads(response["body"])["error"] == "invalid_timestamp"

@@ -30,11 +30,6 @@ variable "lambda_role_name" {
   type        = string
 }
 
-variable "sqs_kms_master_key_id" {
-  description = "KMS key ID or alias used for SQS SSE-KMS encryption. Defaults to AWS managed SQS key."
-  type        = string
-  default     = "alias/aws/sqs"
-}
 
 variable "lambda_timeout" {
   description = "Lambda ingest timeout in seconds"

@@ -8,7 +8,7 @@ resource "aws_sqs_queue" "telemetry_dlq" {
 
   message_retention_seconds = var.queue_retention_seconds
 
-  kms_master_key_id = var.sqs_kms_master_key_id
+  sqs_managed_sse_enabled = true
 
 }
 
@@ -24,7 +24,7 @@ resource "aws_sqs_queue" "telemetry_queue" {
 
   message_retention_seconds = var.queue_retention_seconds
 
-  kms_master_key_id = var.sqs_kms_master_key_id
+  sqs_managed_sse_enabled = true
 
   redrive_policy = jsonencode({
 
