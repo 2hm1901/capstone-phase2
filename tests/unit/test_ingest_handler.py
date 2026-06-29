@@ -60,7 +60,11 @@ def test_handler_accepts_valid_payload(monkeypatch):
 def test_handler_rejects_unknown_metric_type(monkeypatch):
     monkeypatch.setenv("TELEMETRY_QUEUE_URL", "https://queue-url")
     monkeypatch.setenv("ALLOWED_METRIC_TYPES", "api_latency_ms")
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     response = ingest_handler.handler(
         make_event(
@@ -79,7 +83,11 @@ def test_handler_rejects_unknown_metric_type(monkeypatch):
 def test_handler_rejects_tenant_mismatch(monkeypatch):
     monkeypatch.setenv("TELEMETRY_QUEUE_URL", "https://queue-url")
     monkeypatch.setenv("ALLOWED_METRIC_TYPES", "api_latency_ms")
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     response = ingest_handler.handler(
         make_event(
@@ -96,7 +104,11 @@ def test_handler_rejects_tenant_mismatch(monkeypatch):
 def test_handler_rejects_pii_labels(monkeypatch):
     monkeypatch.setenv("TELEMETRY_QUEUE_URL", "https://queue-url")
     monkeypatch.setenv("ALLOWED_METRIC_TYPES", "api_latency_ms")
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     response = ingest_handler.handler(
         make_event(
@@ -113,7 +125,11 @@ def test_handler_rejects_pii_labels(monkeypatch):
 def test_handler_rejects_invalid_json(monkeypatch):
     monkeypatch.setenv("TELEMETRY_QUEUE_URL", "https://queue-url")
     monkeypatch.setenv("ALLOWED_METRIC_TYPES", "api_latency_ms")
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     event = {"headers": {"X-Tenant-Id": "tenant-cdo08-demo"}, "body": "{not json"}
     response = ingest_handler.handler(event, None)
@@ -121,10 +137,12 @@ def test_handler_rejects_invalid_json(monkeypatch):
     assert response["statusCode"] == 400
     assert json.loads(response["body"])["error"] == "invalid_json"
 
-
-
 def test_handler_rejects_missing_schema_version(monkeypatch):
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     payload = valid_payload()
     payload.pop("schema_version")
@@ -141,7 +159,11 @@ def test_handler_rejects_missing_schema_version(monkeypatch):
 
 
 def test_handler_rejects_missing_correlation_id(monkeypatch):
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     payload = valid_payload()
     payload.pop("correlation_id")
@@ -158,7 +180,11 @@ def test_handler_rejects_missing_correlation_id(monkeypatch):
 
 
 def test_handler_rejects_labels_not_object(monkeypatch):
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     response = ingest_handler.handler(
         make_event(
@@ -173,7 +199,11 @@ def test_handler_rejects_labels_not_object(monkeypatch):
 
 
 def test_handler_rejects_value_not_number(monkeypatch):
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     response = ingest_handler.handler(
         make_event(
@@ -188,7 +218,11 @@ def test_handler_rejects_value_not_number(monkeypatch):
 
 
 def test_handler_rejects_invalid_timestamp(monkeypatch):
-    monkeypatch.setattr(ingest_handler.sqs, "send_message", lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")))
+    monkeypatch.setattr(
+        ingest_handler.sqs,
+        "send_message",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not send")),
+    )
 
     response = ingest_handler.handler(
         make_event(

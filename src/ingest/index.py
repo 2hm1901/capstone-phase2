@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 import boto3
 
