@@ -1,19 +1,27 @@
 import json
 import boto3
 import sys
+import os
 from botocore.exceptions import ClientError
 
 # Constants
-REGION = "us-east-1"
-PREFIX = "cdo08-sandbox"
-BUCKET_NAME = "cdo08-sandbox-ai-baselines-894597652722"
-KMS_ALIAS = "alias/cdo08-sandbox-kms-key"
-BUDGET_NAME = "cdo08-sandbox-budget-guardrail"
-SECRET_ARN = "arn:aws:secretsmanager:us-east-1:894597652722:secret:cdo08-sandbox-grafana-token-gZj9fV"
-AUDIT_TABLE = "cdo08-sandbox-audit"
-INGEST_LAMBDA = "cdo08-sandbox-ingest"
-REVIEWER_ROLE = "arn:aws:iam::894597652722:role/cdo08-sandbox-reviewer-role"
-GENERATOR_ROLE = "arn:aws:iam::894597652722:role/cdo08-sandbox-generator-role"
+REGION = os.environ.get("AWS_REGION", "us-east-1")
+PREFIX = os.environ.get("CDO08_PREFIX", "cdo08-sandbox")
+BUCKET_NAME = os.environ.get("CDO08_BASELINE_BUCKET", "cdo08-sandbox-ai-baselines-894597652722")
+KMS_ALIAS = os.environ.get("CDO08_KMS_ALIAS", "alias/cdo08-sandbox-kms-key")
+BUDGET_NAME = os.environ.get("CDO08_MANUAL_BUDGET_NAME")
+BUDGET_EMAIL = os.environ.get("CDO08_BUDGET_EMAIL", "2hm1901dev@gmail.com")
+GRAFANA_SECRET_ID = os.environ.get("CDO08_GRAFANA_SECRET_ID", f"{PREFIX}-grafana-token")
+AUDIT_TABLE = os.environ.get("CDO08_AUDIT_TABLE", "cdo08-sandbox-audit")
+INGEST_LAMBDA = os.environ.get("CDO08_INGEST_LAMBDA", "cdo08-sandbox-ingest")
+REVIEWER_ROLE = os.environ.get(
+    "CDO08_REVIEWER_ROLE_ARN",
+    "arn:aws:iam::894597652722:role/cdo08-sandbox-reviewer-role",
+)
+GENERATOR_ROLE = os.environ.get(
+    "CDO08_GENERATOR_ROLE_ARN",
+    "arn:aws:iam::894597652722:role/cdo08-sandbox-generator-role",
+)
 
 s3_client = boto3.client("s3", region_name=REGION)
 kms_client = boto3.client("kms", region_name=REGION)
@@ -95,6 +103,12 @@ def verify_kms():
 # 3. Verify Budget
 def verify_budget(account_id):
     print("\n--- Verifying AWS Budget ---")
+    if not BUDGET_NAME:
+        log_info(
+            "Skipping budget verification. Set CDO08_MANUAL_BUDGET_NAME to verify the manually owned budget."
+        )
+        return
+
     try:
         budgets = budgets_client.describe_budgets(AccountId=account_id)
         target_budget = None
@@ -115,8 +129,22 @@ def verify_budget(account_id):
             )
             thresholds = [int(n.get("Threshold")) for n in notifs.get("Notifications", [])]
             log_success(f"Budget alert thresholds configured at: {thresholds}%")
+            subscribers = [
+                subscriber
+                for notification in notifs.get("Notifications", [])
+                for subscriber in budgets_client.describe_subscribers_for_notification(
+                    AccountId=account_id,
+                    BudgetName=BUDGET_NAME,
+                    Notification=notification,
+                ).get("Subscribers", [])
+            ]
+            emails = [subscriber.get("Address") for subscriber in subscribers if subscriber.get("SubscriptionType") == "EMAIL"]
+            if BUDGET_EMAIL in emails:
+                log_success(f"Budget email subscriber is configured: {BUDGET_EMAIL}")
+            else:
+                log_failure(f"Budget email subscriber {BUDGET_EMAIL} was not found")
         else:
-            log_failure(f"Budget {BUDGET_NAME} not found (might not be applied yet)")
+            log_failure(f"Manual budget {BUDGET_NAME} not found")
     except Exception as e:
         log_failure(f"Budget verification failed: {e}")
 
@@ -192,7 +220,7 @@ def negative_test_reviewer():
     # Check Secrets Manager GetSecretValue
     sm_reviewer = session.client("secretsmanager", region_name=REGION)
     try:
-        sm_reviewer.get_secret_value(SecretId=SECRET_ARN)
+        sm_reviewer.get_secret_value(SecretId=GRAFANA_SECRET_ID)
         log_failure("Reviewer was able to read Grafana Token secret! (Security breach)")
     except ClientError as e:
         if "AccessDenied" in str(e):

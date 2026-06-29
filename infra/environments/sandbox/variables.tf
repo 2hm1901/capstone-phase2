@@ -235,16 +235,3 @@ variable "reviewer_principal_arns" {
   type        = list(string)
   default     = []
 }
-
-variable "budget_limit" {
-  description = "The budget limit in USD"
-  type        = string
-  default     = "200"
-}
-
-variable "budget_email" {
-  description = "The email address for budget alerts"
-  type        = string
-  default     = "2hm1901dev@gmail.com"
-}
-

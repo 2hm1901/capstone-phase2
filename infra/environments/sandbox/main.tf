@@ -382,8 +382,6 @@ module "security_baseline" {
   name_prefix             = local.name_prefix
   tags                    = local.common_tags
   reviewer_principal_arns = var.reviewer_principal_arns
-  budget_limit            = var.budget_limit
-  budget_email            = var.budget_email
 }
 
 # ==============================================================================
