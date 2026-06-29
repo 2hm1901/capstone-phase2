@@ -317,56 +317,6 @@ output "writer_log_group_name" {
   value       = module.telemetry_store.writer_log_group_name
 }
 
-output "ingest_api_endpoint" {
-  description = "Telemetry ingest API endpoint."
-  value       = module.telemetry_ingest.api_endpoint
-}
-
-output "ingest_auth_mode" {
-  description = "Telemetry ingest API authentication mode."
-  value       = module.telemetry_ingest.auth_mode
-}
-
-output "ingest_lambda_name" {
-  description = "Telemetry ingest Lambda function name."
-  value       = module.telemetry_ingest.ingest_lambda_name
-}
-
-output "ingest_lambda_arn" {
-  description = "Telemetry ingest Lambda function ARN."
-  value       = module.telemetry_ingest.ingest_lambda_arn
-}
-
-output "telemetry_queue_url" {
-  description = "Telemetry SQS queue URL consumed by the Writer Lambda."
-  value       = module.telemetry_ingest.queue_url
-}
-
-output "telemetry_queue_arn" {
-  description = "Telemetry SQS queue ARN consumed by the Writer Lambda."
-  value       = module.telemetry_ingest.queue_arn
-}
-
-output "telemetry_queue_name" {
-  description = "Telemetry SQS queue name consumed by the Writer Lambda."
-  value       = module.telemetry_ingest.queue_name
-}
-
-output "telemetry_dlq_url" {
-  description = "Telemetry DLQ URL."
-  value       = module.telemetry_ingest.dlq_url
-}
-
-output "telemetry_dlq_arn" {
-  description = "Telemetry DLQ ARN."
-  value       = module.telemetry_ingest.dlq_arn
-}
-
-output "telemetry_dlq_name" {
-  description = "Telemetry DLQ name."
-  value       = module.telemetry_ingest.dlq_name
-}
-
 module "observability_audit" {
   source = "../../modules/observability_audit"
 
