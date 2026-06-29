@@ -120,23 +120,20 @@ variable "grafana_api_token_secret_arn" {
   default     = null
 }
 
-# Lambda artifact inputs
-variable "prediction_package_path" {
-  description = "Local zip package path for Prediction Lambda placeholder or real code"
+# Lambda source inputs
+variable "prediction_source_dir" {
+  description = "Source directory for Prediction Lambda code. Terraform packages this directory when enable_prediction=true."
   type        = string
-  default     = "build/prediction.zip"
 }
 
-variable "serving_adapter_package_path" {
-  description = "Local zip package path for Serving Adapter Lambda placeholder or real code"
+variable "serving_adapter_source_dir" {
+  description = "Source directory for Serving Adapter Lambda code. Terraform packages this directory when enable_prediction=true."
   type        = string
-  default     = "build/serving-adapter.zip"
 }
 
-variable "fallback_package_path" {
-  description = "Local zip package path for Fallback Lambda placeholder or real code"
+variable "fallback_source_dir" {
+  description = "Source directory for Fallback Lambda code. Terraform packages this directory when enable_prediction=true."
   type        = string
-  default     = "build/fallback.zip"
 }
 
 # IAM roles are owned by infra/modules/security_baseline.

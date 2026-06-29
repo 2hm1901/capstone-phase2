@@ -128,22 +128,22 @@ variable "prediction_service_list" {
   ]
 }
 
-variable "prediction_package_path" {
-  description = "Local zip path for Prediction Lambda code. Required only when enable_prediction=true."
+variable "prediction_source_dir" {
+  description = "Source directory for Prediction Lambda code. Terraform packages this directory when enable_prediction=true."
   type        = string
-  default     = "build/prediction.zip"
+  default     = "../../../src/prediction"
 }
 
-variable "serving_adapter_package_path" {
-  description = "Local zip path for Serving Adapter Lambda code. Required only when enable_prediction=true."
+variable "serving_adapter_source_dir" {
+  description = "Source directory for Serving Adapter Lambda code. Terraform packages this directory when enable_prediction=true."
   type        = string
-  default     = "build/serving-adapter.zip"
+  default     = "../../../src/serving_adapter"
 }
 
-variable "fallback_package_path" {
-  description = "Local zip path for Fallback Lambda code. Required only when enable_prediction=true."
+variable "fallback_source_dir" {
+  description = "Source directory for Fallback Lambda code. Terraform packages this directory when enable_prediction=true."
   type        = string
-  default     = "build/fallback.zip"
+  default     = "../../../src/fallback"
 }
 
 variable "writer_batch_size" {

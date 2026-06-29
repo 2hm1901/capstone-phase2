@@ -1,7 +1,9 @@
 import json
 import os
 import uuid
+
 import boto3
+
 
 sqs = boto3.client("sqs")
 
@@ -37,7 +39,14 @@ def handler(event, context):
     required_fields = ["ts", "tenant_id", "service_id", "metric_type", "value"]
     missing = [field for field in required_fields if field not in body]
     if missing:
-        return response(400, {"error": "missing_required_fields", "fields": missing, "correlation_id": correlation_id})
+        return response(
+            400,
+            {
+                "error": "missing_required_fields",
+                "fields": missing,
+                "correlation_id": correlation_id,
+            },
+        )
 
     if tenant_header and tenant_header != body["tenant_id"]:
         return response(403, {"error": "tenant_mismatch", "correlation_id": correlation_id})
