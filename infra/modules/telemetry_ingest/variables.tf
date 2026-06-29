@@ -88,7 +88,7 @@ variable "api_throttling_rate_limit" {
 }
 
 variable "ingest_reserved_concurrency" {
-  description = "Reserved concurrency for Lambda Ingest to protect account concurrency. Use -1 for unreserved."
+  description = "Reserved concurrency for Lambda Ingest. Set null to use unreserved account concurrency."
   type        = number
-  default     = 10
+  default     = null
 }

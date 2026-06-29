@@ -105,7 +105,7 @@ module "telemetry_ingest" {
 
   lambda_timeout              = 10
   lambda_memory               = 256
-  ingest_reserved_concurrency = 10
+  ingest_reserved_concurrency = null
 
   queue_retention_seconds    = 345600
   visibility_timeout_seconds = 60

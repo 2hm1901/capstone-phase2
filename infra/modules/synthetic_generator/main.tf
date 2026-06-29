@@ -115,7 +115,7 @@ data "aws_iam_policy_document" "ecs_task_assume" {
 resource "aws_iam_role" "task_execution" {
   name               = "${var.name_prefix}-generator-execution-role"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
-  description        = "ECS task execution role for synthetic generator — pulls ECR image, writes CW logs."
+  description        = "ECS task execution role for synthetic generator - pulls ECR image and writes CloudWatch logs."
 
   tags = merge(var.tags, {
     Name      = "${var.name_prefix}-generator-execution-role"

@@ -278,9 +278,9 @@ resource "aws_cloudwatch_dashboard" "this" {
           title  = "Alarm Status"
           region = var.aws_region
           alarms = [
-            aws_cloudwatch_metric_alarm.audit_write_error.alarm_name,
-            aws_cloudwatch_metric_alarm.annotation_error.alarm_name,
-            aws_cloudwatch_metric_alarm.fallback_count_spike.alarm_name
+            aws_cloudwatch_metric_alarm.audit_write_error.arn,
+            aws_cloudwatch_metric_alarm.annotation_error.arn,
+            aws_cloudwatch_metric_alarm.fallback_count_spike.arn
           ]
         }
       }

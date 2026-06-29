@@ -98,9 +98,9 @@ variable "writer_memory_size" {
 }
 
 variable "writer_reserved_concurrency" {
-  description = "Reserved concurrency for telemetry writer Lambda to avoid retry storms."
+  description = "Reserved concurrency for telemetry writer Lambda. Set null to use unreserved account concurrency."
   type        = number
-  default     = 3
+  default     = null
 }
 
 variable "log_retention_days" {
