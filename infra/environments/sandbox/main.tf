@@ -77,21 +77,21 @@ module "prediction" {
   audit_table_name             = module.observability_audit.audit_table_name
   grafana_api_token_secret_arn = module.security_baseline.grafana_secret_arn
 
-  prediction_role_arn          = module.security_baseline.prediction_role_arn
-  serving_adapter_role_arn     = module.security_baseline.prediction_role_arn
-  fallback_role_arn            = module.security_baseline.fallback_role_arn
-  scheduler_role_arn           = module.security_baseline.scheduler_role_arn
-  prediction_package_path      = var.prediction_package_path
-  serving_adapter_package_path = var.serving_adapter_package_path
-  fallback_package_path        = var.fallback_package_path
+  prediction_role_arn        = module.security_baseline.prediction_role_arn
+  serving_adapter_role_arn   = module.security_baseline.prediction_role_arn
+  fallback_role_arn          = module.security_baseline.fallback_role_arn
+  scheduler_role_arn         = module.security_baseline.scheduler_role_arn
+  prediction_source_dir      = "${path.module}/${var.prediction_source_dir}"
+  serving_adapter_source_dir = "${path.module}/${var.serving_adapter_source_dir}"
+  fallback_source_dir        = "${path.module}/${var.fallback_source_dir}"
 
   tags = local.common_tags
 }
 
-data "archive_file" "ingest_placeholder" {
+data "archive_file" "ingest" {
   type        = "zip"
-  source_dir  = "../../packages/ingest_placeholder"
-  output_path = "${path.root}/.terraform/ingest-placeholder.zip"
+  source_dir  = "${path.module}/../../../src/ingest"
+  output_path = "${path.root}/.terraform/ingest.zip"
 }
 
 module "telemetry_ingest" {
@@ -100,7 +100,7 @@ module "telemetry_ingest" {
   name_prefix         = local.name_prefix
   api_stage           = "sandbox"
   auth_mode           = "IAM"
-  lambda_package_path = data.archive_file.ingest_placeholder.output_path
+  lambda_package_path = data.archive_file.ingest.output_path
   lambda_role_arn     = module.security_baseline.ingest_role_arn
 
   lambda_timeout              = 10
@@ -114,6 +114,56 @@ module "telemetry_ingest" {
 
   api_throttling_burst_limit = 1000
   api_throttling_rate_limit  = 1000
+}
+
+output "ingest_api_endpoint" {
+  description = "Telemetry ingest API endpoint."
+  value       = module.telemetry_ingest.api_endpoint
+}
+
+output "ingest_auth_mode" {
+  description = "Telemetry ingest API authentication mode."
+  value       = module.telemetry_ingest.auth_mode
+}
+
+output "ingest_lambda_name" {
+  description = "Telemetry Ingest Lambda function name."
+  value       = module.telemetry_ingest.ingest_lambda_name
+}
+
+output "ingest_lambda_arn" {
+  description = "Telemetry Ingest Lambda function ARN."
+  value       = module.telemetry_ingest.ingest_lambda_arn
+}
+
+output "telemetry_queue_url" {
+  description = "Telemetry SQS queue URL."
+  value       = module.telemetry_ingest.queue_url
+}
+
+output "telemetry_queue_arn" {
+  description = "Telemetry SQS queue ARN."
+  value       = module.telemetry_ingest.queue_arn
+}
+
+output "telemetry_queue_name" {
+  description = "Telemetry SQS queue name."
+  value       = module.telemetry_ingest.queue_name
+}
+
+output "telemetry_dlq_url" {
+  description = "Telemetry DLQ URL."
+  value       = module.telemetry_ingest.dlq_url
+}
+
+output "telemetry_dlq_arn" {
+  description = "Telemetry DLQ ARN."
+  value       = module.telemetry_ingest.dlq_arn
+}
+
+output "telemetry_dlq_name" {
+  description = "Telemetry DLQ name."
+  value       = module.telemetry_ingest.dlq_name
 }
 
 module "telemetry_store" {
