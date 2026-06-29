@@ -696,3 +696,34 @@ resource "aws_iam_role_policy" "reviewer_deny_policy" {
   role   = aws_iam_role.reviewer[0].id
   policy = data.aws_iam_policy_document.reviewer_deny.json
 }
+
+# ==============================================================================
+# 8. COST GUARDRAIL (AWS BUDGET)
+# ==============================================================================
+
+resource "aws_budgets_budget" "budget_guardrail" {
+  name              = "${var.name_prefix}-budget-guardrail"
+  budget_type       = "COST"
+  limit_amount      = var.budget_limit
+  limit_unit        = "USD"
+  time_unit         = "MONTHLY"
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.budget_email]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.budget_email]
+  }
+
+  tags = var.tags
+}
+
