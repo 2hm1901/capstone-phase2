@@ -1,4 +1,5 @@
 
+
 # Telemetry Dead Letter Queue
 
 resource "aws_sqs_queue" "telemetry_dlq" {
@@ -41,6 +42,32 @@ resource "aws_sqs_queue" "telemetry_queue" {
 resource "aws_cloudwatch_log_group" "ingest_lambda" {
   name              = "/aws/lambda/${var.name_prefix}-ingest"
   retention_in_days = var.log_retention_days
+}
+
+resource "aws_cloudwatch_log_metric_filter" "validation_passed" {
+  name           = "${var.name_prefix}-ingest-validation-pass"
+  log_group_name = aws_cloudwatch_log_group.ingest_lambda.name
+  pattern        = "\"telemetry_validation_passed\""
+
+  metric_transformation {
+    name      = "TelemetryValidationPassed"
+    namespace = "CDO/TelemetryIngest"
+    value     = "1"
+    unit      = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "validation_failed" {
+  name           = "${var.name_prefix}-ingest-validation-fail"
+  log_group_name = aws_cloudwatch_log_group.ingest_lambda.name
+  pattern        = "\"telemetry_validation_failed\""
+
+  metric_transformation {
+    name      = "TelemetryValidationFailed"
+    namespace = "CDO/TelemetryIngest"
+    value     = "1"
+    unit      = "Count"
+  }
 }
 
 # Lambda Ingest Function
@@ -180,4 +207,102 @@ resource "aws_cloudwatch_metric_alarm" "telemetry_dlq_visible_messages" {
   dimensions = {
     QueueName = aws_sqs_queue.telemetry_dlq.name
   }
+}
+data "aws_iam_policy_document" "telemetry_queue" {
+  statement {
+    sid    = "AllowIngestLambdaSendMessage"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = [var.lambda_role_arn]
+    }
+
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.telemetry_queue.arn]
+  }
+
+  statement {
+    sid    = "DenySendMessageFromUnexpectedPrincipal"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.telemetry_queue.arn]
+
+    condition {
+      test     = "ArnNotLike"
+      variable = "aws:PrincipalArn"
+      values = [
+        var.lambda_role_arn,
+        "arn:aws:sts::*:assumed-role/${var.lambda_role_name}/*"
+      ]
+    }
+  }
+
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "sqs:SendMessage",
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ChangeMessageVisibility"
+    ]
+    resources = [aws_sqs_queue.telemetry_queue.arn]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "telemetry_queue" {
+  queue_url = aws_sqs_queue.telemetry_queue.url
+  policy    = data.aws_iam_policy_document.telemetry_queue.json
+}
+
+data "aws_iam_policy_document" "telemetry_dlq" {
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "sqs:SendMessage",
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ChangeMessageVisibility"
+    ]
+    resources = [aws_sqs_queue.telemetry_dlq.arn]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "telemetry_dlq" {
+  queue_url = aws_sqs_queue.telemetry_dlq.url
+  policy    = data.aws_iam_policy_document.telemetry_dlq.json
 }

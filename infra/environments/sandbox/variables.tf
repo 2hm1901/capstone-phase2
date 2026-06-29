@@ -82,7 +82,7 @@ variable "enable_prediction" {
 variable "enable_writer_event_source_mapping" {
   description = "Enable SQS to Writer Lambda event source mapping only after the real telemetry queue output is available."
   type        = bool
-  default     = false
+  default     = true
 }
 
 # ---------------------------------------------------------------------------

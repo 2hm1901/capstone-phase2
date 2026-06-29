@@ -6,7 +6,7 @@ locals {
   amp_remote_write_endpoint = "https://aps-workspaces.${data.aws_region.current.name}.amazonaws.com/workspaces/${aws_prometheus_workspace.this.id}/api/v1/remote_write"
   amp_query_endpoint        = "https://aps-workspaces.${data.aws_region.current.name}.amazonaws.com/workspaces/${aws_prometheus_workspace.this.id}/api/v1/query"
 
-  writer_allowed_labels = "tenant_id,service_id,region,metric_type"
+  writer_allowed_labels = "region,db_type,queue_name,cache_type,environment,instance_id"
   writer_blocked_labels = "correlation_id,request_id,event_id,trace_id,session_id,user_id"
 }
 
@@ -60,7 +60,6 @@ resource "aws_lambda_function" "writer" {
       ENVIRONMENT               = var.environment
       ALLOWED_PROMETHEUS_LABELS = local.writer_allowed_labels
       BLOCKED_PROMETHEUS_LABELS = local.writer_blocked_labels
-      REMOTE_WRITE_STATUS       = "placeholder"
     }
   }
 

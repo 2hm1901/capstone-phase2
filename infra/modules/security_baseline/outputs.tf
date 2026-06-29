@@ -34,6 +34,11 @@ output "ingest_role_arn" {
   value       = aws_iam_role.ingest.arn
 }
 
+output "ingest_role_name" {
+  description = "Name of the Ingest role"
+  value       = aws_iam_role.ingest.name
+}
+
 output "writer_role_arn" {
   description = "ARN of the Writer role"
   value       = aws_iam_role.writer.arn
