@@ -108,9 +108,9 @@ variable "audit_ttl_enabled" {
 }
 
 variable "create_grafana_workspace" {
-  description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
+  description = "Set true to create a new Amazon Managed Grafana workspace. Requires IAM Identity Center (AWS_SSO) enabled in the account. Set false to use reference mode with an existing workspace ID."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "prediction_service_list" {
