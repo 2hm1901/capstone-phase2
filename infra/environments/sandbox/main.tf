@@ -325,6 +325,7 @@ output "writer_log_group_name" {
   description = "Telemetry Writer CloudWatch log group name."
   value       = module.telemetry_store.writer_log_group_name
 }
+
 module "observability_audit" {
   source = "../../modules/observability_audit"
 
