@@ -4,6 +4,27 @@ locals {
   fallback_lambda_name        = "${var.name_prefix}-fallback-lambda"
 }
 
+data "archive_file" "prediction_lambda" {
+  count       = var.enable_prediction ? 1 : 0
+  type        = "zip"
+  source_dir  = var.prediction_source_dir
+  output_path = "${path.root}/.terraform/prediction.zip"
+}
+
+data "archive_file" "serving_adapter_lambda" {
+  count       = var.enable_prediction ? 1 : 0
+  type        = "zip"
+  source_dir  = var.serving_adapter_source_dir
+  output_path = "${path.root}/.terraform/serving-adapter.zip"
+}
+
+data "archive_file" "fallback_lambda" {
+  count       = var.enable_prediction ? 1 : 0
+  type        = "zip"
+  source_dir  = var.fallback_source_dir
+  output_path = "${path.root}/.terraform/fallback.zip"
+}
+
 # CloudWatch log groups
 resource "aws_cloudwatch_log_group" "prediction_lambda_logs" {
   count             = var.enable_prediction ? 1 : 0
@@ -33,8 +54,8 @@ resource "aws_cloudwatch_log_group" "fallback_lambda_logs" {
 resource "aws_lambda_function" "prediction_lambda" {
   count = var.enable_prediction ? 1 : 0
 
-  filename         = var.prediction_package_path
-  source_code_hash = filebase64sha256(var.prediction_package_path)
+  filename         = data.archive_file.prediction_lambda[0].output_path
+  source_code_hash = data.archive_file.prediction_lambda[0].output_base64sha256
   function_name    = local.prediction_lambda_name
   role             = var.prediction_role_arn
   handler          = "index.handler"
@@ -65,8 +86,8 @@ resource "aws_lambda_function" "prediction_lambda" {
 resource "aws_lambda_function" "serving_adapter_lambda" {
   count = var.enable_prediction ? 1 : 0
 
-  filename         = var.serving_adapter_package_path
-  source_code_hash = filebase64sha256(var.serving_adapter_package_path)
+  filename         = data.archive_file.serving_adapter_lambda[0].output_path
+  source_code_hash = data.archive_file.serving_adapter_lambda[0].output_base64sha256
   function_name    = local.serving_adapter_lambda_name
   role             = var.serving_adapter_role_arn
   handler          = "index.handler"
@@ -94,8 +115,8 @@ resource "aws_lambda_function" "serving_adapter_lambda" {
 resource "aws_lambda_function" "fallback_lambda" {
   count = var.enable_prediction ? 1 : 0
 
-  filename         = var.fallback_package_path
-  source_code_hash = filebase64sha256(var.fallback_package_path)
+  filename         = data.archive_file.fallback_lambda[0].output_path
+  source_code_hash = data.archive_file.fallback_lambda[0].output_base64sha256
   function_name    = local.fallback_lambda_name
   role             = var.fallback_role_arn
   handler          = "index.handler"

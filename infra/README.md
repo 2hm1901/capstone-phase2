@@ -16,7 +16,35 @@ infra/
 
 `bootstrap` là administrative setup, không phải một môi trường ứng dụng. State local của bootstrap chỉ dùng để tạo state bucket lần đầu; không commit file state này.
 
-Module hiện có trong repo là `modules/networking`. Các module Terraform khác chỉ được thêm khi có Jira task/PR tương ứng, để tránh nhiều người tạo trùng cùng một resource.
+Module Terraform chỉ được thêm hoặc sửa khi có Jira task/PR tương ứng, để tránh nhiều người tạo trùng cùng một resource. Các module app dùng chung IAM/KMS/secret/network output từ module nền tảng thay vì tự tạo lại.
+
+## Quy chuẩn Lambda source code
+
+Source code Lambda nằm trong `src/<lambda-name>/`, không nằm trong `infra/` và không commit file `.zip`.
+
+```text
+src/
+├── ingest/             # Lambda Telemetry Ingest, handler index.handler
+├── writer/             # Lambda Telemetry Writer, handler handler.handler
+├── prediction/         # Lambda Prediction, handler index.handler
+├── serving_adapter/    # Lambda Serving Adapter, handler index.handler
+└── fallback/           # Lambda Fallback, handler index.handler
+```
+
+Terraform package Lambda bằng `archive_file` khi chạy `plan/apply`:
+
+- Ingest: package từ `src/ingest`.
+- Writer: package từ `src/writer`.
+- Prediction/Serving Adapter/Fallback: package từ `src/prediction`, `src/serving_adapter`, `src/fallback` khi `enable_prediction=true`.
+
+Quy tắc khi sửa hoặc thêm Lambda:
+
+- Sửa code trong `src/<lambda-name>/`, không sửa trực tiếp trong `.terraform/` hoặc AWS Console.
+- Không commit `build/`, `.terraform/`, `*.zip`, `*.tfplan`.
+- Handler phải khớp file code: `index.py` dùng `index.handler`, `handler.py` dùng `handler.handler`.
+- IAM role lấy từ `infra/modules/security_baseline`; không tự tạo role riêng trong module Lambda nếu không có task/security review.
+- Secret value không được để trong source, Terraform variable, Lambda environment plaintext hoặc log. Chỉ truyền secret ARN/name rồi đọc từ Secrets Manager khi runtime cần.
+- Nếu Lambda cần dependency ngoài chuẩn library, thêm bước build rõ trong PR. Artifact build vẫn không được commit; source và lockfile/config build mới là source of truth.
 
 ## Bước 0: kiểm tra AWS user (mọi thành viên)
 
