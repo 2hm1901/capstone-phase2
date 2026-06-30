@@ -5,6 +5,8 @@ import uuid
 import urllib.request
 import urllib.error
 import boto3
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 
 lambda_client = boto3.client("lambda")
 fallback_lambda_name = os.environ["FALLBACK_LAMBDA_NAME"]
@@ -32,6 +34,12 @@ def handler(event, context):
                 "correlation_id": correlation_id
             })
             return response
+        except NonRetryableAIError as e:
+            log_event("ai_engine_non_retryable_error", {
+                "correlation_id": correlation_id,
+                "error": str(e)
+            })
+            raise
         except Exception as e:
             last_error = e
             log_event("ai_engine_retry", {
@@ -50,15 +58,23 @@ def handler(event, context):
 
 
 def call_ai_engine(signal_window, context_data, tenant_id, correlation_id):
-    url = f"{ai_engine_endpoint}/v1/predict"
+    url = f"{ai_engine_endpoint.rstrip('/')}/v1/predict"
     payload = json.dumps({
         "signal_window": signal_window,
         "context": context_data
     }).encode("utf-8")
 
     headers = build_headers(tenant_id, correlation_id)
+    signed_headers = sign_request_with_botocore(
+        method="POST",
+        url=url,
+        body=payload,
+        headers=headers,
+        region=os.environ.get("AWS_REGION", "us-east-1"),
+        service="execute-api"
+    )
 
-    request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+    request = urllib.request.Request(url, data=payload, headers=signed_headers, method="POST")
 
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
@@ -66,6 +82,8 @@ def call_ai_engine(signal_window, context_data, tenant_id, correlation_id):
     except urllib.error.HTTPError as e:
         if e.code in [429, 503]:
             raise Exception(f"AI Engine returned {e.code}")
+        if e.code in [400, 401, 403, 422]:
+            raise NonRetryableAIError(f"AI Engine returned non-retryable HTTP {e.code}")
         raise
 
 
@@ -75,6 +93,21 @@ def build_headers(tenant_id, correlation_id):
         "X-Tenant-Id": tenant_id,
         "X-Correlation-Id": correlation_id
     }
+
+
+def sign_request_with_botocore(method, url, body, headers, region, service):
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    if credentials is None:
+        raise RuntimeError("AWS credentials unavailable for SigV4 signing")
+
+    request = AWSRequest(method=method, url=url, data=body, headers=headers)
+    SigV4Auth(credentials.get_frozen_credentials(), service, region).add_auth(request)
+    return dict(request.headers)
+
+
+class NonRetryableAIError(Exception):
+    pass
 
 
 def invoke_fallback(event):

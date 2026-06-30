@@ -128,6 +128,55 @@ terraform -chdir=infra/environments/sandbox apply
 
 Không chạy `make tf-apply` hoặc `terraform apply` từ feature branch khi chưa có review plan. Nếu task phụ thuộc resource của người khác chưa merge, dùng `terraform output`, data source hoặc biến input rõ ràng sau khi PR phụ thuộc đã merge; không tạo lại resource thuộc owner khác.
 
+## Runbook W12: chạy k6 ECS và AI Engine
+
+AI Engine dùng API Gateway `AWS_IAM` làm SigV4 edge, VPC Link tới internal ALB và ECS task trong private subnet. K6 generator chạy bằng ECS Fargate trong workload private subnet; workload VPC có NAT Gateway để task pull ECR image, ghi CloudWatch Logs và gọi API Gateway ingest.
+
+Deploy base runtime và tạo k6 task definition:
+
+```bash
+terraform -chdir=infra/environments/sandbox plan \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+
+terraform -chdir=infra/environments/sandbox apply \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+```
+
+Smoke test AI Engine qua SigV4 API Gateway:
+
+```bash
+AI_ENGINE_ENDPOINT="$(terraform -chdir=infra/environments/sandbox output -raw ai_engine_endpoint)" \
+python3 scripts/smoke-ai-engine.py
+```
+
+Chạy k6 ECS đủ 2 giờ để tạo AMP window:
+
+Lệnh dưới đây cần `jq` để format subnet output. Nếu máy chưa có `jq`, copy `workload_private_subnet_ids` từ `terraform output` rồi điền thủ công vào `subnets=[...]`.
+
+```bash
+aws ecs run-task \
+  --region us-east-1 \
+  --cluster "$(terraform -chdir=infra/environments/sandbox output -raw generator_cluster_name)" \
+  --task-definition cdo08-sandbox-generator \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$(terraform -chdir=infra/environments/sandbox output -json workload_private_subnet_ids | jq -r 'join(",")')],securityGroups=[$(terraform -chdir=infra/environments/sandbox output -raw generator_security_group_id)],assignPublicIp=DISABLED}" \
+  --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"SCENARIO","value":"noisy_baseline"},{"name":"RUN_DURATION_SECONDS","value":"7200"},{"name":"EMIT_INTERVAL_SECONDS","value":"60"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
+```
+
+Sau khi AMP có đủ tối thiểu 120 phút data, bật prediction:
+
+```bash
+terraform -chdir=infra/environments/sandbox plan \
+  -var='enable_prediction=true' \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+
+terraform -chdir=infra/environments/sandbox apply \
+  -var='enable_prediction=true' \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+```
+
+NAT Gateway phát sinh hourly cost. Nếu không chạy k6 ECS dài hạn, review plan/destroy cleanup sau test window theo quyết định PM.
+
 ## Quy ước làm việc
 
 - Chỉ thay đổi resources qua `infra/environments/sandbox/` và module được gọi từ đó.

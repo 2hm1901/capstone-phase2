@@ -81,9 +81,6 @@ module "prediction" {
   grafana_workspace_endpoint   = module.observability_audit.grafana_workspace_endpoint
   audit_retention_days         = var.audit_retention_days
 
-  serving_adapter_subnet_ids        = module.networking.ai_engine_private_subnet_ids
-  serving_adapter_security_group_id = module.networking.serving_adapter_security_group_id
-
   prediction_role_arn        = module.security_baseline.prediction_role_arn
   serving_adapter_role_arn   = module.security_baseline.prediction_role_arn
   fallback_role_arn          = module.security_baseline.fallback_role_arn
@@ -98,15 +95,16 @@ module "prediction" {
 module "ai_engine" {
   source = "../../modules/ai_engine"
 
-  name_prefix            = local.name_prefix
-  aws_region             = var.aws_region
-  vpc_id                 = module.networking.ai_engine_vpc_id
-  public_subnet_ids      = module.networking.ai_engine_public_subnet_ids
-  private_subnet_ids     = module.networking.ai_engine_private_subnet_ids
-  alb_security_group_id  = module.networking.ai_engine_alb_security_group_id
-  task_security_group_id = module.networking.ai_engine_task_security_group_id
-  ai_engine_role_arn     = module.security_baseline.ai_engine_role_arn
-  ai_engine_ecr_repo_url = module.security_baseline.ai_engine_ecr_repo_url
+  name_prefix                    = local.name_prefix
+  aws_region                     = var.aws_region
+  vpc_id                         = module.networking.ai_engine_vpc_id
+  public_subnet_ids              = module.networking.ai_engine_public_subnet_ids
+  private_subnet_ids             = module.networking.ai_engine_private_subnet_ids
+  alb_security_group_id          = module.networking.ai_engine_alb_security_group_id
+  task_security_group_id         = module.networking.ai_engine_task_security_group_id
+  api_vpc_link_security_group_id = module.networking.ai_engine_api_vpc_link_security_group_id
+  ai_engine_role_arn             = module.security_baseline.ai_engine_role_arn
+  ai_engine_ecr_repo_url         = module.security_baseline.ai_engine_ecr_repo_url
   # THÊM: Truyền image tag đúng
   ai_engine_image_tag  = "latest"
   baseline_bucket_name = module.security_baseline.baseline_bucket_name
@@ -239,6 +237,16 @@ output "workload_private_subnet_ids" {
   value       = module.networking.workload_private_subnet_ids
 }
 
+output "workload_public_subnet_ids" {
+  description = "Public subnet IDs used by the workload NAT Gateway."
+  value       = module.networking.workload_public_subnet_ids
+}
+
+output "workload_nat_gateway_id" {
+  description = "NAT Gateway ID used by ECS k6 tasks for outbound access."
+  value       = module.networking.workload_nat_gateway_id
+}
+
 output "ai_engine_vpc_id" {
   description = "ID of the AI Engine runtime VPC."
   value       = module.networking.ai_engine_vpc_id
@@ -274,9 +282,24 @@ output "ai_engine_task_security_group_id" {
   value       = module.networking.ai_engine_task_security_group_id
 }
 
-output "serving_adapter_security_group_id" {
-  description = "Security group ID for Serving Adapter Lambda in the AI Engine VPC."
-  value       = module.networking.serving_adapter_security_group_id
+output "ai_engine_api_vpc_link_security_group_id" {
+  description = "Security group ID for API Gateway VPC Link to the internal AI Engine ALB."
+  value       = module.networking.ai_engine_api_vpc_link_security_group_id
+}
+
+output "ai_engine_endpoint" {
+  description = "SigV4-protected API Gateway endpoint for AI Engine."
+  value       = module.ai_engine.ai_engine_endpoint
+}
+
+output "ai_engine_internal_alb_endpoint" {
+  description = "Internal ALB endpoint for AI Engine, reachable only through VPC Link/private network."
+  value       = module.ai_engine.ai_engine_internal_alb_endpoint
+}
+
+output "ai_engine_api_id" {
+  description = "API Gateway ID for the AI Engine SigV4 edge."
+  value       = module.ai_engine.ai_engine_api_id
 }
 
 output "ai_engine_internet_gateway_id" {

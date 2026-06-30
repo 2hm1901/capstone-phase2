@@ -472,11 +472,6 @@ resource "aws_iam_role_policy" "prediction_logs" {
   policy = data.aws_iam_policy_document.cloudwatch_logs_write.json
 }
 
-resource "aws_iam_role_policy_attachment" "prediction_vpc_access" {
-  role       = aws_iam_role.prediction.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
 # ------------------------------------------------------------------------------
 # 7.5. CDO-AI-Engine-Role (ECS Task Role)
 # ------------------------------------------------------------------------------

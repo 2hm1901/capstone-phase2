@@ -105,11 +105,6 @@ resource "aws_lambda_function" "serving_adapter_lambda" {
     }
   }
 
-  vpc_config {
-    subnet_ids         = var.serving_adapter_subnet_ids
-    security_group_ids = [var.serving_adapter_security_group_id]
-  }
-
   depends_on = [
     aws_cloudwatch_log_group.serving_adapter_lambda_logs
   ]
@@ -181,7 +176,7 @@ resource "aws_scheduler_schedule" "prediction_schedule" {
 
 resource "aws_lambda_permission" "allow_scheduler_invoke" {
   for_each      = aws_scheduler_schedule.prediction_schedule
-  statement_id  = "${var.name_prefix}-allow-scheduler"
+  statement_id  = "${var.name_prefix}-allow-scheduler-${each.key}"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.prediction_lambda[0].function_name
   principal     = "scheduler.amazonaws.com"

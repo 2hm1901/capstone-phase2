@@ -34,6 +34,11 @@ variable "task_security_group_id" {
   description = "Security Group ID cho ECS tasks"
 }
 
+variable "api_vpc_link_security_group_id" {
+  type        = string
+  description = "Security Group ID for API Gateway VPC Link to the internal AI Engine ALB"
+}
+
 variable "ai_engine_role_arn" {
   type        = string
   description = "IAM task role ARN cho AI Engine ECS task runtime permissions"

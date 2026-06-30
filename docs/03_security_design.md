@@ -23,7 +23,7 @@ EventBridge Scheduler → Prediction Lambda → AMP + AI Engine Runtime do CDO08
 
 API Gateway là public entry point duy nhất cho synthetic generator gửi telemetry. Nó không cho phép anonymous caller: generator dùng IAM authorization hoặc cơ chế auth được freeze trong Telemetry Contract. API Gateway chỉ nhận HTTPS; request body bị giới hạn kích thước và bị throttling để một generator lỗi không làm cạn tài nguyên platform.
 
-Fargate generator không cần public inbound port. Lambda ingest, writer, prediction và fallback không expose HTTP endpoint công khai. Prediction Lambda chỉ gọi AWS managed services và **AI Engine Runtime do CDO08 host**. Deployment Contract hiện xác định AI Engine runtime là ECS Fargate FastAPI, internal ALB ingress, ECS task trong private subnet và auth IAM SigV4 tại edge layer. CDO08 host model serving trong platform của mình theo artifact/spec AI bàn giao. Nếu Lambda được đặt trong VPC, CDO08 chỉ thêm VPC endpoint/NAT/routing khi thực sự cần để reach engine và AWS services; không tạo NAT Gateway chỉ để “trông production” vì có thể vượt budget capstone.
+Fargate generator không cần public inbound port. Lambda ingest, writer, prediction và fallback không expose HTTP endpoint công khai. Prediction Lambda chỉ gọi AWS managed services và **AI Engine Runtime do CDO08 host**. Deployment Contract hiện xác định AI Engine runtime là ECS Fargate FastAPI, AI API Gateway `AWS_IAM` edge, VPC Link tới internal ALB, ECS task trong private subnet và auth IAM SigV4 tại edge layer. CDO08 host model serving trong platform của mình theo artifact/spec AI bàn giao. Nếu Lambda được đặt trong VPC, CDO08 chỉ thêm VPC endpoint/NAT/routing khi thực sự cần để reach engine và AWS services; không tạo NAT Gateway chỉ để “trông production” vì có thể vượt budget capstone.
 
 Security group chỉ áp dụng cho Fargate/VPC resources thực sự dùng security group. AMP, SQS, DynamoDB, EventBridge Scheduler, API Gateway và Lambda được kiểm soát chủ yếu bằng IAM/resource policy thay vì security group. Đây là lý do không dùng mẫu ALB/RDS security group của template cho kiến trúc serverless này.
 
@@ -33,7 +33,7 @@ Security group chỉ áp dụng cho Fargate/VPC resources thực sự dùng secu
 |---|---|---|
 | Telemetry ingress | API Gateway HTTPS, IAM auth, request size limit, throttling | API config/Terraform và reject test |
 | Generator access | Fargate task role chỉ có `execute-api:Invoke` cho ingest endpoint | IAM policy và denied-call test |
-| Engine access | Serving Adapter Lambda gọi AI Engine Runtime qua internal ALB bằng private SG-to-SG path; ECS task không public IP; SigV4 edge enforcement là hardening riêng | Network/IAM config, SG review và denied-auth test |
+| Engine access | Serving Adapter Lambda gọi AI Engine Runtime qua AI API Gateway `AWS_IAM` bằng SigV4; API Gateway dùng VPC Link tới internal ALB; ECS task không public IP | Network/IAM config, SG review và denied-auth test |
 | Service egress | Chỉ HTTPS tới AWS services/AI Engine path được phép | Lambda config, IAM policy, endpoint decision |
 | Public exposure | Chỉ ALB của AI Engine có HTTPS ingress; Fargate/Lambda/AMP/DynamoDB/SQS không public inbound, ECS task không public IP | Architecture/terraform review |
 | Dependency failure | Telemetry SQS DLQ và Lambda/Scheduler CloudWatch alarm tách riêng | DLQ config và injected-failure test |
@@ -97,7 +97,7 @@ AMP customer-managed KMS key không là default của CDO08. Nếu bật CMK, Gr
 - Generator gọi API Gateway qua HTTPS; API Gateway từ chối HTTP.
 - Lambda gọi AMP, Secrets Manager, DynamoDB, Grafana và AI Engine Runtime nội bộ qua TLS/HTTPS hoặc AWS private path theo contract.
 - Không truyền secret qua query string, annotation text hoặc audit log.
-- AI Engine auth/TLS/network rule theo Deployment Contract: internal ALB ingress, ECS task private, no API key; SigV4 edge enforcement cần hardening riêng trước khi claim full contract auth.
+- AI Engine auth/TLS/network rule theo Deployment Contract: AI API Gateway `AWS_IAM`, VPC Link tới internal ALB, ECS task private, no API key.
 
 ## 5. Audit logging và PII handling
 

@@ -8,6 +8,16 @@ output "workload_private_subnet_ids" {
   value       = aws_subnet.workload_private[*].id
 }
 
+output "workload_public_subnet_ids" {
+  description = "Public subnet IDs for workload NAT Gateway."
+  value       = aws_subnet.workload_public[*].id
+}
+
+output "workload_nat_gateway_id" {
+  description = "NAT Gateway ID used by ECS k6 tasks in workload private subnets for outbound access."
+  value       = aws_nat_gateway.workload.id
+}
+
 output "ai_engine_vpc_id" {
   description = "ID of the AI Engine runtime VPC."
   value       = aws_vpc.ai_engine.id
@@ -38,9 +48,9 @@ output "ai_engine_task_security_group_id" {
   value       = aws_security_group.ai_engine_task.id
 }
 
-output "serving_adapter_security_group_id" {
-  description = "Security group ID for Serving Adapter Lambda in the AI Engine VPC."
-  value       = aws_security_group.serving_adapter.id
+output "ai_engine_api_vpc_link_security_group_id" {
+  description = "Security group ID for API Gateway VPC Link to the internal AI Engine ALB."
+  value       = aws_security_group.ai_engine_api_vpc_link.id
 }
 
 output "ai_engine_s3_endpoint_id" {

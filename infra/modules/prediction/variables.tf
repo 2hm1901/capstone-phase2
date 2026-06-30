@@ -126,16 +126,6 @@ variable "grafana_workspace_endpoint" {
   default     = null
 }
 
-variable "serving_adapter_subnet_ids" {
-  description = "Private subnet IDs used by Serving Adapter Lambda to reach the internal AI Engine ALB."
-  type        = list(string)
-}
-
-variable "serving_adapter_security_group_id" {
-  description = "Security group ID for Serving Adapter Lambda inside the AI Engine VPC."
-  type        = string
-}
-
 # Lambda source inputs
 variable "prediction_source_dir" {
   description = "Source directory for Prediction Lambda code. Terraform packages this directory when enable_prediction=true."

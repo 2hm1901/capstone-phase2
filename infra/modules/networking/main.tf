@@ -43,6 +43,21 @@ resource "aws_subnet" "workload_private" {
   })
 }
 
+resource "aws_subnet" "workload_public" {
+  count = var.private_subnet_count
+
+  vpc_id                  = aws_vpc.workload.id
+  cidr_block              = cidrsubnet(var.workload_vpc_cidr, 8, count.index + 100)
+  availability_zone       = local.az_names[count.index]
+  map_public_ip_on_launch = true
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-workload-public-${count.index + 1}"
+    Tier = "public"
+    Role = "synthetic-workload-nat"
+  })
+}
+
 resource "aws_subnet" "ai_engine_private" {
   count = var.private_subnet_count
 
@@ -81,6 +96,56 @@ resource "aws_route_table" "workload_private" {
   })
 }
 
+resource "aws_internet_gateway" "workload" {
+  vpc_id = aws_vpc.workload.id
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-workload-igw"
+    Role = "synthetic-workload-egress"
+  })
+}
+
+resource "aws_route_table" "workload_public" {
+  vpc_id = aws_vpc.workload.id
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-workload-public-rt"
+  })
+}
+
+resource "aws_route" "workload_public_internet" {
+  route_table_id         = aws_route_table.workload_public.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.workload.id
+}
+
+resource "aws_eip" "workload_nat" {
+  domain = "vpc"
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-workload-nat-eip"
+    Role = "synthetic-workload-egress"
+  })
+}
+
+resource "aws_nat_gateway" "workload" {
+  allocation_id = aws_eip.workload_nat.id
+  subnet_id     = aws_subnet.workload_public[0].id
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-workload-nat"
+    Role = "synthetic-workload-egress"
+  })
+
+  depends_on = [aws_internet_gateway.workload]
+}
+
+resource "aws_route" "workload_private_nat" {
+  route_table_id         = aws_route_table.workload_private.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.workload.id
+}
+
 resource "aws_route_table" "ai_engine_private" {
   vpc_id = aws_vpc.ai_engine.id
 
@@ -117,6 +182,13 @@ resource "aws_route_table_association" "workload_private" {
 
   subnet_id      = aws_subnet.workload_private[count.index].id
   route_table_id = aws_route_table.workload_private.id
+}
+
+resource "aws_route_table_association" "workload_public" {
+  count = var.private_subnet_count
+
+  subnet_id      = aws_subnet.workload_public[count.index].id
+  route_table_id = aws_route_table.workload_public.id
 }
 
 resource "aws_route_table_association" "ai_engine_private" {
@@ -191,13 +263,13 @@ resource "aws_security_group" "ai_engine_task" {
   })
 }
 
-resource "aws_security_group" "serving_adapter" {
-  name        = "${var.name_prefix}-serving-adapter-sg"
-  description = "Security group for Serving Adapter Lambda inside the AI Engine VPC."
+resource "aws_security_group" "ai_engine_api_vpc_link" {
+  name        = "${var.name_prefix}-ai-engine-api-vpc-link-sg"
+  description = "Security group for API Gateway VPC Link to the internal AI Engine ALB."
   vpc_id      = aws_vpc.ai_engine.id
 
   tags = merge(var.tags, {
-    Name = "${var.name_prefix}-serving-adapter-sg"
+    Name = "${var.name_prefix}-ai-engine-api-vpc-link-sg"
   })
 }
 
@@ -219,24 +291,14 @@ resource "aws_security_group" "ai_engine_vpc_endpoint" {
   })
 }
 
-resource "aws_security_group_rule" "serving_adapter_egress_to_alb" {
+resource "aws_security_group_rule" "ai_engine_api_vpc_link_egress_to_alb" {
   type                     = "egress"
-  description              = "Allow Serving Adapter Lambda to call the internal AI Engine ALB."
-  security_group_id        = aws_security_group.serving_adapter.id
+  description              = "Allow API Gateway VPC Link to call the internal AI Engine ALB."
+  security_group_id        = aws_security_group.ai_engine_api_vpc_link.id
   from_port                = 80
   to_port                  = 80
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.ai_engine_alb.id
-}
-
-resource "aws_security_group_rule" "serving_adapter_egress_to_vpc_endpoints" {
-  type                     = "egress"
-  description              = "Allow Serving Adapter Lambda to call private AWS service endpoints."
-  security_group_id        = aws_security_group.serving_adapter.id
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.ai_engine_vpc_endpoint.id
 }
 
 resource "aws_security_group_rule" "ai_engine_vpc_endpoint_ingress_from_task" {
@@ -249,21 +311,10 @@ resource "aws_security_group_rule" "ai_engine_vpc_endpoint_ingress_from_task" {
   source_security_group_id = aws_security_group.ai_engine_task.id
 }
 
-resource "aws_security_group_rule" "ai_engine_vpc_endpoint_ingress_from_serving_adapter" {
-  type                     = "ingress"
-  description              = "Allow HTTPS from Serving Adapter Lambda to interface endpoints."
-  security_group_id        = aws_security_group.ai_engine_vpc_endpoint.id
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.serving_adapter.id
-}
-
 resource "aws_vpc_endpoint" "ai_engine_interface" {
   for_each = toset([
     "ecr.api",
     "ecr.dkr",
-    "lambda",
     "logs",
   ])
 
@@ -280,14 +331,14 @@ resource "aws_vpc_endpoint" "ai_engine_interface" {
   })
 }
 
-resource "aws_security_group_rule" "ai_engine_alb_ingress_from_serving_adapter" {
+resource "aws_security_group_rule" "ai_engine_alb_ingress_from_api_vpc_link" {
   type                     = "ingress"
-  description              = "Allow HTTP to the internal AI Engine ALB only from Serving Adapter Lambda."
+  description              = "Allow HTTP to the internal AI Engine ALB only from API Gateway VPC Link."
   security_group_id        = aws_security_group.ai_engine_alb.id
   from_port                = 80
   to_port                  = 80
   protocol                 = "tcp"
-  source_security_group_id = aws_security_group.serving_adapter.id
+  source_security_group_id = aws_security_group.ai_engine_api_vpc_link.id
 }
 
 resource "aws_security_group_rule" "ai_engine_alb_egress_to_task" {

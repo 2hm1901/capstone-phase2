@@ -4,8 +4,18 @@ output "ai_engine_alb_dns_name" {
 }
 
 output "ai_engine_endpoint" {
-  description = "HTTP endpoint nội bộ của AI Engine"
+  description = "SigV4-protected AI Engine API Gateway endpoint."
+  value       = aws_apigatewayv2_stage.ai_engine.invoke_url
+}
+
+output "ai_engine_internal_alb_endpoint" {
+  description = "Internal HTTP endpoint of the AI Engine ALB."
   value       = "http://${aws_lb.ai_engine.dns_name}"
+}
+
+output "ai_engine_api_id" {
+  description = "API Gateway ID for the SigV4-protected AI Engine edge."
+  value       = aws_apigatewayv2_api.ai_engine.id
 }
 
 output "ai_engine_ecs_cluster_arn" {

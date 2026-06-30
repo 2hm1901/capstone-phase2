@@ -104,6 +104,53 @@ resource "aws_lb_listener" "ai_engine" {
   }
 }
 
+resource "aws_apigatewayv2_api" "ai_engine" {
+  name          = "${var.name_prefix}-ai-engine-api"
+  protocol_type = "HTTP"
+
+  tags = var.tags
+}
+
+resource "aws_apigatewayv2_vpc_link" "ai_engine" {
+  name               = "${var.name_prefix}-ai-engine-vpc-link"
+  security_group_ids = [var.api_vpc_link_security_group_id]
+  subnet_ids         = var.private_subnet_ids
+
+  tags = var.tags
+}
+
+resource "aws_apigatewayv2_integration" "ai_engine" {
+  api_id                 = aws_apigatewayv2_api.ai_engine.id
+  integration_type       = "HTTP_PROXY"
+  integration_method     = "ANY"
+  integration_uri        = aws_lb_listener.ai_engine.arn
+  connection_type        = "VPC_LINK"
+  connection_id          = aws_apigatewayv2_vpc_link.ai_engine.id
+  payload_format_version = "1.0"
+}
+
+resource "aws_apigatewayv2_route" "ai_engine_predict" {
+  api_id             = aws_apigatewayv2_api.ai_engine.id
+  route_key          = "POST /v1/predict"
+  target             = "integrations/${aws_apigatewayv2_integration.ai_engine.id}"
+  authorization_type = "AWS_IAM"
+}
+
+resource "aws_apigatewayv2_route" "ai_engine_health" {
+  api_id             = aws_apigatewayv2_api.ai_engine.id
+  route_key          = "GET /health"
+  target             = "integrations/${aws_apigatewayv2_integration.ai_engine.id}"
+  authorization_type = "AWS_IAM"
+}
+
+resource "aws_apigatewayv2_stage" "ai_engine" {
+  api_id      = aws_apigatewayv2_api.ai_engine.id
+  name        = "sandbox"
+  auto_deploy = true
+
+  tags = var.tags
+}
+
 # Tạo Task Definition cho Fargate
 resource "aws_ecs_task_definition" "ai_engine" {
   family                   = "${var.name_prefix}-ai-engine"
