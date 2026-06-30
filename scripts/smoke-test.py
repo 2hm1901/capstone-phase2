@@ -95,7 +95,7 @@ def main():
     payload = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
         "tenant_id": "tenant-cdo08-demo",
-        "service_id": "payment-api",
+        "service_id": "payment-gw",
         "metric_type": "api_latency_ms",
         "value": 150.5,
         "labels": {"region": "us-east-1", "environment": "sandbox"},

@@ -18,8 +18,9 @@ def get_tf_outputs():
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python run-scenario.py <scenario_name> [service_id]")
-        print("Scenarios: noisy_baseline, gradual_drift, sudden_spike, slow_leak")
+        print("Usage: python run-scenario.py <scenario_name> [service_id] [run_duration_seconds]")
+        print("Scenarios: noisy_baseline, gradual_drift, sudden_spike, slow_leak, all")
+        print("Services: payment-gw, ledger, fraud-detector")
         sys.exit(1)
         
     scenario = sys.argv[1]
@@ -50,6 +51,12 @@ def main():
         service_id = sys.argv[2]
         overrides["containerOverrides"][0]["environment"].append(
             {"name": "SERVICE_LIST", "value": service_id}
+        )
+
+    if len(sys.argv) > 3:
+        run_duration_seconds = sys.argv[3]
+        overrides["containerOverrides"][0]["environment"].append(
+            {"name": "RUN_DURATION_SECONDS", "value": run_duration_seconds}
         )
         
     cmd = [

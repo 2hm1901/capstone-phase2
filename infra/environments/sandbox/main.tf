@@ -42,8 +42,10 @@ module "synthetic_generator" {
   # Generator behaviour
   tenant_id             = var.generator_tenant_id
   service_list          = var.generator_service_list
+  scenario              = var.generator_scenario
   scenario_list         = var.generator_scenario_list
   emit_interval_seconds = var.generator_emit_interval_seconds
+  run_duration_seconds  = var.generator_run_duration_seconds
 
   ingest_api_endpoint = module.telemetry_ingest.api_endpoint
 

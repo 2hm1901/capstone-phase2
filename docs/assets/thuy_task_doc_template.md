@@ -18,7 +18,7 @@ Thuỷ thực hiện research cho thành phần Synthetic Workload và Fargate G
 
 Sau khi đánh giá nhiều lựa chọn như AWS Lambda, EC2 và local script, CDO08 quyết định sử dụng Amazon ECS Fargate chạy containerized k6 generator.
 
-Trong thiết kế này, k6 được đóng gói thành container và chạy trên ECS Fargate để sinh telemetry cho ba service demo gồm `gateway-api`, `payment-api` và `queue-worker`. Workload sẽ mô phỏng bốn hành vi hệ thống gồm gradual drift, sudden spike, slow leak và noisy baseline.
+Trong thiết kế này, k6 được đóng gói thành container và chạy trên ECS Fargate để sinh telemetry cho ba service demo gồm `payment-gw`, `ledger` và `fraud-detector`. Workload sẽ mô phỏng bốn hành vi hệ thống gồm gradual drift, sudden spike, slow leak và noisy baseline.
 
 Nhóm lựa chọn ECS Fargate vì đây là giải pháp cân bằng nhất giữa khả năng chạy dài (≥ 2 giờ), tính tái lập, độ tin cậy, chi phí và mức độ vận hành đơn giản trong phạm vi capstone.
 

@@ -1,15 +1,7 @@
-FROM python:3.11-slim
+FROM grafana/k6:0.51.0
 
-WORKDIR /app
+WORKDIR /scripts
 
-# Install dependencies as root
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY generator.js /scripts/generator.js
 
-# Copy source code
-COPY generator.py .
-
-# Hardening: Run as non-root user
-USER 1000
-
-CMD ["python", "generator.py"]
+ENTRYPOINT ["k6", "run", "/scripts/generator.js"]
