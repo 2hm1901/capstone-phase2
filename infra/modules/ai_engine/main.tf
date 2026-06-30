@@ -127,6 +127,10 @@ resource "aws_apigatewayv2_integration" "ai_engine" {
   connection_type        = "VPC_LINK"
   connection_id          = aws_apigatewayv2_vpc_link.ai_engine.id
   payload_format_version = "1.0"
+
+  request_parameters = {
+    "overwrite:path" = "$request.path"
+  }
 }
 
 resource "aws_apigatewayv2_route" "ai_engine_predict" {
