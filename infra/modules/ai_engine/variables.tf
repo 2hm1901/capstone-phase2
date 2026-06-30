@@ -50,6 +50,12 @@ variable "ai_engine_image_tag" {
   default     = "latest"
 }
 
+variable "ai_engine_image_digest" {
+  type        = string
+  description = "AI Engine image digest (optional, for immutable tags)"
+  default     = null
+}
+
 variable "baseline_bucket_name" {
   type        = string
   description = "Tên S3 bucket chứa baselines"

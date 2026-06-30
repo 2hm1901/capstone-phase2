@@ -1,19 +1,19 @@
 import json
 import os
 import uuid
-import hashlib
-import hmac
 import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse
 import boto3
+import botocore
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 
 lambda_client = boto3.client("lambda")
 dynamodb = boto3.resource("dynamodb")
 audit_table = dynamodb.Table(os.environ["AUDIT_TABLE_NAME"])
-
+AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", 30))
 SERVING_ADAPTER_LAMBDA_NAME = os.environ["SERVING_ADAPTER_LAMBDA_NAME"]
 AMP_QUERY_ENDPOINT = os.environ["AMP_QUERY_ENDPOINT"]
 LOOKBACK_MINUTES = int(os.environ.get("LOOKBACK_MINUTES", 120))
@@ -115,7 +115,6 @@ def query_metric_from_amp(metric_type, tenant_id, service_id, start_time, end_ti
     end_unix = int(end_time.timestamp())
 
     # PromQL query: lấy tất cả giá trị của metric với tenant_id và service_id tương ứng
-    # Lưu ý: Tên metric trong AMP chính là giá trị của trường `metric_type`
     promql_query = f'{metric_type}{{tenant_id="{tenant_id}", service_id="{service_id}"}}'
 
     # Tạo query parameters cho AMP API
@@ -127,15 +126,17 @@ def query_metric_from_amp(metric_type, tenant_id, service_id, start_time, end_ti
     })
 
     url = f"{AMP_QUERY_ENDPOINT.rstrip('/')}/api/v1/query_range?{query_params}"
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Amz-Content-Sha256": hashlib.sha256(b"").hexdigest()  # Payload trống cho GET request
-    }
 
-    # Sign request với SigV4 (tương tự như writer lambda)
-    signed_headers = sign_aws_request("GET", url, b"", headers)
+    # Sign request với SigV4 dùng botocore
+    headers = sign_request_with_botocore(
+        method="GET",
+        url=url,
+        body=b"",
+        region=os.environ.get("AWS_REGION", "us-east-1"),
+        service="aps"
+    )
 
-    request = urllib.request.Request(url, headers=signed_headers, method="GET")
+    request = urllib.request.Request(url, headers=headers, method="GET")
 
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
@@ -185,74 +186,16 @@ def query_metric_from_amp(metric_type, tenant_id, service_id, start_time, end_ti
         return []
 
 
-def sign_aws_request(method, endpoint, payload, headers):
-    """Sign AWS request with SigV4 (tham khảo từ writer/handler.py)"""
-    parsed_url = urlparse(endpoint)
-    region = os.environ.get("AWS_REGION") or "us-east-1"
-    access_key = os.environ.get("AWS_ACCESS_KEY_ID")
-    secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-    session_token = os.environ.get("AWS_SESSION_TOKEN")
+# Hàm sign mới dùng botocore:
+def sign_request_with_botocore(method, url, body, region, service):
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    creds = credentials.get_frozen_credentials()
 
-    request_time = datetime.now(timezone.utc)
-    amz_date = request_time.strftime("%Y%m%dT%H%M%SZ")
-    date_stamp = request_time.strftime("%Y%m%d")
+    request = AWSRequest(method=method, url=url, data=body)
+    SigV4Auth(creds, service, region).add_auth(request)
 
-    signed_headers = {
-        **headers,
-        "Host": parsed_url.netloc,
-        "X-Amz-Date": amz_date,
-    }
-    if session_token:
-        signed_headers["X-Amz-Security-Token"] = session_token
-
-    canonical_headers, signed_header_names = build_canonical_headers(signed_headers)
-    canonical_request = "\n".join([
-        method,
-        parsed_url.path or "/",
-        parsed_url.query,
-        canonical_headers,
-        signed_header_names,
-        hashlib.sha256(payload).hexdigest(),
-    ])
-
-    credential_scope = f"{date_stamp}/{region}/aps/aws4_request"
-    string_to_sign = "\n".join([
-        "AWS4-HMAC-SHA256",
-        amz_date,
-        credential_scope,
-        hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
-    ])
-
-    signing_key = get_signature_key(secret_key, date_stamp, region, "aps")
-    signature = hmac.new(signing_key, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
-    signed_headers["Authorization"] = (
-        "AWS4-HMAC-SHA256 "
-        f"Credential={access_key}/{credential_scope}, "
-        f"SignedHeaders={signed_header_names}, "
-        f"Signature={signature}"
-    )
-    return signed_headers
-
-
-def build_canonical_headers(headers):
-    canonical = []
-    for name, value in headers.items():
-        canonical.append((name.lower(), " ".join(str(value).strip().split())))
-    canonical.sort()
-    canonical_headers = "".join(f"{name}:{value}\n" for name, value in canonical)
-    signed_header_names = ";".join(name for name, _ in canonical)
-    return canonical_headers, signed_header_names
-
-
-def get_signature_key(secret_key, date_stamp, region, service):
-    date_key = hmac_sha256(("AWS4" + secret_key).encode("utf-8"), date_stamp)
-    region_key = hmac_sha256(date_key, region)
-    service_key = hmac_sha256(region_key, service)
-    return hmac_sha256(service_key, "aws4_request")
-
-
-def hmac_sha256(key, message):
-    return hmac.new(key, message.encode("utf-8"), hashlib.sha256).digest()
+    return dict(request.headers)
 
 
 def invoke_serving_adapter(payload):
@@ -265,14 +208,22 @@ def invoke_serving_adapter(payload):
 
 
 def write_audit(correlation_id, service_id, tenant_id, result, scheduled_at, is_fallback):
+    prediction_id = correlation_id  # Dùng correlation_id làm prediction_id
+    tenant_service = f"{tenant_id}#{service_id}"
+    now = datetime.now(timezone.utc)
+    expires_at = int((now + timedelta(days=AUDIT_RETENTION_DAYS)).timestamp())
+
     audit_table.put_item(Item={
-        "correlation_id": correlation_id,
+        "tenant_service": tenant_service,       # Partition key (BẮT BUỘC)
+        "prediction_id": prediction_id,         # Sort key (BẮT BUỘC)
+        "correlation_id": correlation_id,       # Dùng cho GSI
         "service_id": service_id,
         "tenant_id": tenant_id,
         "result": result,
         "is_fallback": is_fallback,
         "scheduled_at": scheduled_at,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": now.isoformat(),
+        "expires_at": expires_at                # TTL attribute
     })
 
 

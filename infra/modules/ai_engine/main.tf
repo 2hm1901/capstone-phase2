@@ -7,7 +7,7 @@ resource "aws_ecs_cluster" "ai_engine" {
 # Tạo Application Load Balancer (ALB)
 resource "aws_lb" "ai_engine" {
   name               = "${var.name_prefix}-ai-engine-alb"
-  internal           = false  # ALB public để Prediction Lambda gọi được
+  internal           = false  # TẠM THỜI: internal = false để dễ demo/test. Sau này có thể harden về internal/private path
   load_balancer_type = "application"
   security_groups    = [var.alb_security_group_id]
   subnets            = var.public_subnet_ids

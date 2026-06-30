@@ -52,7 +52,7 @@ variable "generator_tenant_id" {
 variable "generator_service_list" {
   description = "Comma-separated list of service_id values the generator emits for."
   type        = string
-  default     = "payment-api,queue-worker,gateway-api"
+  default     = "payment-gw,ledger,fraud-detector"
 }
 
 variable "generator_scenario_list" {
@@ -76,7 +76,7 @@ variable "generator_log_retention_days" {
 variable "enable_prediction" {
   description = "Enable Prediction/Scheduler/Fail-open resources. Keep false until Lambda packages and AI endpoint are ready."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_writer_event_source_mapping" {
@@ -122,9 +122,9 @@ variable "prediction_service_list" {
     enabled             = optional(bool, true)
   }))
   default = [
-    { service_id = "payment-api", tenant_id = "tenant-cdo08-demo" },
-    { service_id = "queue-worker", tenant_id = "tenant-cdo08-demo" },
-    { service_id = "gateway-api", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "payment-gw", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "ledger", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "fraud-detector", tenant_id = "tenant-cdo08-demo" },
   ]
 }
 

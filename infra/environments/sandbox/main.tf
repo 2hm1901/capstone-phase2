@@ -70,7 +70,7 @@ module "prediction" {
 
   # AI Engine runtime is implemented separately. Keep disabled until the endpoint
   # and Lambda packages are ready.
-  ai_engine_endpoint   = null
+  ai_engine_endpoint   = module.ai_engine.ai_engine_endpoint
   ai_engine_invoke_arn = null
 
   audit_table_arn              = module.observability_audit.audit_table_arn
@@ -100,11 +100,12 @@ module "ai_engine" {
   task_security_group_id = module.networking.ai_engine_task_security_group_id
   ai_engine_role_arn     = module.security_baseline.ai_engine_role_arn
   ai_engine_ecr_repo_url = module.security_baseline.ai_engine_ecr_repo_url
-  ai_engine_image_tag    = "latest" # Thay thế bằng tag thật của AI team
-  baseline_bucket_name   = module.security_baseline.baseline_bucket_name
-  app_log_group_name     = module.security_baseline.ai_engine_app_log_group_name
-  audit_log_group_name   = module.security_baseline.ai_engine_audit_log_group_name
-  tags                   = local.common_tags
+  # THÊM: Truyền image tag đúng
+  ai_engine_image_tag  = "latest"
+  baseline_bucket_name = module.security_baseline.baseline_bucket_name
+  app_log_group_name   = module.security_baseline.ai_engine_app_log_group_name
+  audit_log_group_name = module.security_baseline.ai_engine_audit_log_group_name
+  tags                 = local.common_tags
 }
 
 data "archive_file" "ingest" {

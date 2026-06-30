@@ -34,17 +34,17 @@ variable "service_list" {
   }))
   default = [
     {
-      service_id = "payment-api"
+      service_id = "payment-gw"
       tenant_id  = "tenant-cdo08-demo"
       enabled    = true
     },
     {
-      service_id = "queue-worker"
+      service_id = "ledger"
       tenant_id  = "tenant-cdo08-demo"
       enabled    = true
     },
     {
-      service_id = "gateway-api"
+      service_id = "fraud-detector"
       tenant_id  = "tenant-cdo08-demo"
       enabled    = true
     },

@@ -86,7 +86,7 @@ variable "tenant_id" {
 variable "service_list" {
   description = "Comma-separated list of service_id values the generator will emit for."
   type        = string
-  default     = "payment-api,queue-worker,gateway-api"
+  default     = "payment-gw,ledger,fraud-detector"
 }
 
 variable "scenario_list" {
