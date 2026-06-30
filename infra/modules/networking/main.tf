@@ -94,7 +94,7 @@ resource "aws_internet_gateway" "ai_engine" {
 
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-ai-engine-igw"
-    Role = "ai-engine-public-ingress"
+    Role = "reserved-for-future-public-ingress"
   })
 }
 
@@ -191,18 +191,20 @@ resource "aws_security_group" "ai_engine_task" {
   })
 }
 
+resource "aws_security_group" "serving_adapter" {
+  name        = "${var.name_prefix}-serving-adapter-sg"
+  description = "Security group for Serving Adapter Lambda inside the AI Engine VPC."
+  vpc_id      = aws_vpc.ai_engine.id
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-serving-adapter-sg"
+  })
+}
+
 resource "aws_security_group" "ai_engine_vpc_endpoint" {
   name        = "${var.name_prefix}-ai-engine-vpc-endpoint-sg"
   description = "Security group for AI Engine interface VPC endpoints."
   vpc_id      = aws_vpc.ai_engine.id
-
-  ingress {
-    description     = "Allow HTTPS from AI Engine ECS tasks to interface endpoints."
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ai_engine_task.id]
-  }
 
   egress {
     description = "Allow endpoint responses."
@@ -217,10 +219,51 @@ resource "aws_security_group" "ai_engine_vpc_endpoint" {
   })
 }
 
+resource "aws_security_group_rule" "serving_adapter_egress_to_alb" {
+  type                     = "egress"
+  description              = "Allow Serving Adapter Lambda to call the internal AI Engine ALB."
+  security_group_id        = aws_security_group.serving_adapter.id
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.ai_engine_alb.id
+}
+
+resource "aws_security_group_rule" "serving_adapter_egress_to_vpc_endpoints" {
+  type                     = "egress"
+  description              = "Allow Serving Adapter Lambda to call private AWS service endpoints."
+  security_group_id        = aws_security_group.serving_adapter.id
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.ai_engine_vpc_endpoint.id
+}
+
+resource "aws_security_group_rule" "ai_engine_vpc_endpoint_ingress_from_task" {
+  type                     = "ingress"
+  description              = "Allow HTTPS from AI Engine ECS tasks to interface endpoints."
+  security_group_id        = aws_security_group.ai_engine_vpc_endpoint.id
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.ai_engine_task.id
+}
+
+resource "aws_security_group_rule" "ai_engine_vpc_endpoint_ingress_from_serving_adapter" {
+  type                     = "ingress"
+  description              = "Allow HTTPS from Serving Adapter Lambda to interface endpoints."
+  security_group_id        = aws_security_group.ai_engine_vpc_endpoint.id
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.serving_adapter.id
+}
+
 resource "aws_vpc_endpoint" "ai_engine_interface" {
   for_each = toset([
     "ecr.api",
     "ecr.dkr",
+    "lambda",
     "logs",
   ])
 
@@ -237,14 +280,14 @@ resource "aws_vpc_endpoint" "ai_engine_interface" {
   })
 }
 
-resource "aws_security_group_rule" "ai_engine_alb_ingress_from_workload" {
-  type              = "ingress"
-  description       = "Allow HTTP to the AI Engine public ALB for demo/test."
-  security_group_id = aws_security_group.ai_engine_alb.id
-  from_port         = 80
-  to_port           = 80
-  protocol          = "tcp"
-  cidr_blocks       = var.ai_engine_alb_ingress_cidrs
+resource "aws_security_group_rule" "ai_engine_alb_ingress_from_serving_adapter" {
+  type                     = "ingress"
+  description              = "Allow HTTP to the internal AI Engine ALB only from Serving Adapter Lambda."
+  security_group_id        = aws_security_group.ai_engine_alb.id
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.serving_adapter.id
 }
 
 resource "aws_security_group_rule" "ai_engine_alb_egress_to_task" {

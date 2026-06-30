@@ -28,7 +28,7 @@ variable "private_subnet_count" {
 }
 
 variable "ai_engine_alb_ingress_cidrs" {
-  description = "CIDR blocks allowed to reach the AI Engine public ALB on HTTPS."
+  description = "Deprecated. AI Engine ALB is internal and only accepts traffic from Serving Adapter SG."
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }

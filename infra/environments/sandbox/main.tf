@@ -81,6 +81,9 @@ module "prediction" {
   grafana_workspace_endpoint   = module.observability_audit.grafana_workspace_endpoint
   audit_retention_days         = var.audit_retention_days
 
+  serving_adapter_subnet_ids        = module.networking.ai_engine_private_subnet_ids
+  serving_adapter_security_group_id = module.networking.serving_adapter_security_group_id
+
   prediction_role_arn        = module.security_baseline.prediction_role_arn
   serving_adapter_role_arn   = module.security_baseline.prediction_role_arn
   fallback_role_arn          = module.security_baseline.fallback_role_arn
@@ -247,7 +250,7 @@ output "ai_engine_private_subnet_ids" {
 }
 
 output "ai_engine_public_subnet_ids" {
-  description = "Public subnet IDs for the AI Engine application load balancer."
+  description = "Reserved public subnet IDs in the AI Engine VPC. Current AI Engine ALB is internal."
   value       = module.networking.ai_engine_public_subnet_ids
 }
 
@@ -262,7 +265,7 @@ output "generator_security_group_id" {
 }
 
 output "ai_engine_alb_security_group_id" {
-  description = "Security group ID for the AI Engine application load balancer."
+  description = "Security group ID for the internal AI Engine application load balancer."
   value       = module.networking.ai_engine_alb_security_group_id
 }
 
@@ -271,8 +274,13 @@ output "ai_engine_task_security_group_id" {
   value       = module.networking.ai_engine_task_security_group_id
 }
 
+output "serving_adapter_security_group_id" {
+  description = "Security group ID for Serving Adapter Lambda in the AI Engine VPC."
+  value       = module.networking.serving_adapter_security_group_id
+}
+
 output "ai_engine_internet_gateway_id" {
-  description = "Internet Gateway ID for the AI Engine VPC public ALB path."
+  description = "Internet Gateway ID reserved for future public ingress; current AI Engine ALB is internal."
   value       = module.networking.ai_engine_internet_gateway_id
 }
 

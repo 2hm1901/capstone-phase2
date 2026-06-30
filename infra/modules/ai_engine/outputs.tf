@@ -1,10 +1,10 @@
 output "ai_engine_alb_dns_name" {
-  description = "Tên DNS của AI Engine ALB"
+  description = "Tên DNS nội bộ của AI Engine ALB"
   value       = aws_lb.ai_engine.dns_name
 }
 
 output "ai_engine_endpoint" {
-  description = "HTTP endpoint của AI Engine"
+  description = "HTTP endpoint nội bộ của AI Engine"
   value       = "http://${aws_lb.ai_engine.dns_name}"
 }
 

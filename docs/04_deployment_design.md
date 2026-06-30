@@ -139,7 +139,7 @@ Theo Deployment Contract, AI Engine Runtime của CDO08:
 | Health check | `/health`, 30s interval, healthy threshold 2, unhealthy threshold 3 |
 | API | `POST /v1/predict` |
 | Auth | IAM SigV4; W11 mock có thể optional theo AI API Contract |
-| Network | public ALB ingress + ECS task trong private subnet |
+| Network | internal ALB ingress + ECS task trong private subnet; Serving Adapter Lambda in AI VPC |
 | Baseline storage | S3 bucket mã hóa KMS; engine fetch baseline hoặc cache 5 phút |
 | Logs | CloudWatch application logs 14 ngày; audit logs 1 năm, KMS encrypted |
 

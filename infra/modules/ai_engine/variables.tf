@@ -16,17 +16,17 @@ variable "vpc_id" {
 
 variable "public_subnet_ids" {
   type        = list(string)
-  description = "Public subnets cho ALB"
+  description = "Reserved public subnets. The current AI Engine ALB is internal and uses private_subnet_ids."
 }
 
 variable "private_subnet_ids" {
   type        = list(string)
-  description = "Private subnets cho ECS tasks"
+  description = "Private subnets cho internal ALB và ECS tasks"
 }
 
 variable "alb_security_group_id" {
   type        = string
-  description = "Security Group ID cho ALB"
+  description = "Security Group ID cho internal ALB"
 }
 
 variable "task_security_group_id" {
@@ -36,7 +36,7 @@ variable "task_security_group_id" {
 
 variable "ai_engine_role_arn" {
   type        = string
-  description = "IAM Role ARN cho ECS task execution"
+  description = "IAM task role ARN cho AI Engine ECS task runtime permissions"
 }
 
 variable "ai_engine_ecr_repo_url" {

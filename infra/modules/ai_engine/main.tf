@@ -64,10 +64,10 @@ resource "aws_iam_role_policy" "ai_engine_execution" {
 # Tạo Application Load Balancer (ALB)
 resource "aws_lb" "ai_engine" {
   name               = "${var.name_prefix}-ai-engine-alb"
-  internal           = false # TẠM THỜI: internal = false để dễ demo/test. Sau này có thể harden về internal/private path
+  internal           = true
   load_balancer_type = "application"
   security_groups    = [var.alb_security_group_id]
-  subnets            = var.public_subnet_ids
+  subnets            = var.private_subnet_ids
   tags               = var.tags
 }
 

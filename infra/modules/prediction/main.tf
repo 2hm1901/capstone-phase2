@@ -105,6 +105,11 @@ resource "aws_lambda_function" "serving_adapter_lambda" {
     }
   }
 
+  vpc_config {
+    subnet_ids         = var.serving_adapter_subnet_ids
+    security_group_ids = [var.serving_adapter_security_group_id]
+  }
+
   depends_on = [
     aws_cloudwatch_log_group.serving_adapter_lambda_logs
   ]
