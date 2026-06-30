@@ -1,10 +1,12 @@
 """
 Mock prediction/fallback annotation + audit evidence script (W12).
 
-Usage:
-    set GRAFANA_TOKEN_SECRET_ID=arn:aws:secretsmanager:us-east-1:894597652722:secret:cdo08-sandbox-grafana-token-XXXX
-    set GRAFANA_WORKSPACE_ENDPOINT=https://g-XXXX.grafana-workspace.us-east-1.amazonaws.com
-    python scripts/mock_annotation_audit.py --service payment-api --metric cpu_usage_percent --outcome prediction --fallback false
+Usage (Mac/Linux):
+    export GRAFANA_TOKEN_SECRET_ID=arn:aws:secretsmanager:us-east-1:894597652722:secret:cdo08-sandbox-grafana-token-XXXX
+    export GRAFANA_WORKSPACE_ENDPOINT=https://g-XXXX.grafana-workspace.us-east-1.amazonaws.com
+    python scripts/mock_annotation_audit.py --service payment-gw --metric cpu_usage_percent --outcome prediction --fallback false
+
+Windows (PowerShell): use $env:GRAFANA_TOKEN_SECRET_ID = "..." instead of export.
 
 This script does NOT require the AI Engine. It writes a DynamoDB audit item
 and publishes a Grafana annotation using the standardized payload contract
@@ -75,12 +77,20 @@ def put_audit_log(logs, args, correlation_id, prediction_id, status="ok"):
         "fallback": args.fallback,
         "status": status,
     }
+    stream_name = f"mock-{prediction_id}"
+    try:
+        logs.create_log_stream(logGroupName=LOG_GROUP, logStreamName=stream_name)
+    except logs.exceptions.ResourceAlreadyExistsException:
+        pass
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ResourceAlreadyExistsException":
+            raise
     logs.put_log_events(
         logGroupName=LOG_GROUP,
-        logStreamName=f"mock-{prediction_id}",
+        logStreamName=stream_name,
         logEvents=[{"timestamp": int(time.time() * 1000), "message": json.dumps(event)}],
     )
-    print(f"[log] PutLogEvents OK group={LOG_GROUP} event={event['event']}")
+    print(f"[log] PutLogEvents OK group={LOG_GROUP} stream={stream_name} event={event['event']}")
 
 
 def get_grafana_token(secretsmanager):
@@ -90,7 +100,14 @@ def get_grafana_token(secretsmanager):
             "No token is hard-coded in this script."
         )
     resp = secretsmanager.get_secret_value(SecretId=GRAFANA_TOKEN_SECRET_ID)
-    return resp["SecretString"]
+    raw = resp["SecretString"]
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and "token" in parsed:
+            return parsed["token"]
+    except (ValueError, TypeError):
+        pass
+    return raw
 
 
 def publish_grafana_annotation(grafana_token, args, prediction_id):
@@ -151,8 +168,8 @@ def query_audit_by_correlation(dynamodb, correlation_id):
 
 def main():
     parser = argparse.ArgumentParser(description="Mock prediction/fallback annotation + audit evidence.")
-    parser.add_argument("--service", required=True, help="service_id (payment-api, queue-worker, gateway-api)")
-    parser.add_argument("--metric", required=True, help="metric_type (cpu_usage_percent, ...)")
+    parser.add_argument("--service", default=None, help="service_id (payment-gw, ledger, fraud-detector)")
+    parser.add_argument("--metric", default=None, help="metric_type (cpu_usage_percent, ...)")
     parser.add_argument("--outcome", default="prediction", choices=["prediction", "fallback", "error"])
     parser.add_argument("--fallback", action="store_true", help="mark as fallback event")
     parser.add_argument("--confidence", type=float, default=0.0)
@@ -166,6 +183,9 @@ def main():
     if args.query_correlation:
         query_audit_by_correlation(dynamodb, args.query_correlation)
         return
+
+    if not args.service or not args.metric:
+        parser.error("--service and --metric are required unless --query-correlation is used")
 
     correlation_id = f"corr-{uuid.uuid4().hex[:12]}"
     prediction_id = f"pred-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:4]}"
