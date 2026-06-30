@@ -120,6 +120,12 @@ variable "grafana_api_token_secret_arn" {
   default     = null
 }
 
+variable "grafana_workspace_endpoint" {
+  description = "Amazon Managed Grafana workspace endpoint. Null until workspace is created."
+  type        = string
+  default     = null
+}
+
 # Lambda source inputs
 variable "prediction_source_dir" {
   description = "Source directory for Prediction Lambda code. Terraform packages this directory when enable_prediction=true."
@@ -199,6 +205,12 @@ variable "log_retention_days" {
   description = "CloudWatch log retention"
   type        = number
   default     = 30
+}
+
+variable "audit_retention_days" {
+  description = "Audit item TTL retention in days. Contract uses 90 days for prediction/fallback audit evidence."
+  type        = number
+  default     = 90
 }
 
 # Tags

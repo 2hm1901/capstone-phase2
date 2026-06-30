@@ -3,7 +3,6 @@ locals {
   serving_adapter_lambda_name = "${var.name_prefix}-serving-adapter-lambda"
   fallback_lambda_name        = "${var.name_prefix}-fallback-lambda"
 }
-data "aws_caller_identity" "current" {}
 
 data "archive_file" "prediction_lambda" {
   count       = var.enable_prediction ? 1 : 0
@@ -72,6 +71,7 @@ resource "aws_lambda_function" "prediction_lambda" {
       SERVING_ADAPTER_LAMBDA_NAME = local.serving_adapter_lambda_name
       LOOKBACK_MINUTES            = tostring(var.lookback_minutes)
       PREDICTION_INTERVAL_MINUTES = tostring(var.prediction_interval_minutes)
+      AUDIT_RETENTION_DAYS        = tostring(var.audit_retention_days)
       LOG_LEVEL                   = "INFO"
     }
   }
@@ -127,11 +127,14 @@ resource "aws_lambda_function" "fallback_lambda" {
 
   environment {
     variables = {
-      AMP_WORKSPACE_ID   = var.amp_workspace_id != null ? var.amp_workspace_id : "placeholder"
-      AMP_QUERY_ENDPOINT = var.amp_query_endpoint != null ? var.amp_query_endpoint : "placeholder"
-      AUDIT_TABLE_NAME   = var.audit_table_name != null ? var.audit_table_name : "placeholder-audit"
-      LOOKBACK_MINUTES   = tostring(var.lookback_minutes)
-      LOG_LEVEL          = "INFO"
+      AMP_WORKSPACE_ID           = var.amp_workspace_id != null ? var.amp_workspace_id : "placeholder"
+      AMP_QUERY_ENDPOINT         = var.amp_query_endpoint != null ? var.amp_query_endpoint : "placeholder"
+      AUDIT_TABLE_NAME           = var.audit_table_name != null ? var.audit_table_name : "placeholder-audit"
+      AUDIT_RETENTION_DAYS       = tostring(var.audit_retention_days)
+      GRAFANA_SECRET_ARN         = var.grafana_api_token_secret_arn != null ? var.grafana_api_token_secret_arn : ""
+      GRAFANA_WORKSPACE_ENDPOINT = var.grafana_workspace_endpoint != null ? var.grafana_workspace_endpoint : ""
+      LOOKBACK_MINUTES           = tostring(var.lookback_minutes)
+      LOG_LEVEL                  = "INFO"
     }
   }
 
@@ -172,12 +175,12 @@ resource "aws_scheduler_schedule" "prediction_schedule" {
 }
 
 resource "aws_lambda_permission" "allow_scheduler_invoke" {
-  count         = var.enable_prediction ? 1 : 0
+  for_each      = aws_scheduler_schedule.prediction_schedule
   statement_id  = "${var.name_prefix}-allow-scheduler"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.prediction_lambda[0].function_name
   principal     = "scheduler.amazonaws.com"
-  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/default/${var.name_prefix}-predict-*"
+  source_arn    = each.value.arn
 }
 
 # CloudWatch Alarms

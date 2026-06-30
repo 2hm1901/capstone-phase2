@@ -78,6 +78,8 @@ module "prediction" {
   audit_table_arn              = module.observability_audit.audit_table_arn
   audit_table_name             = module.observability_audit.audit_table_name
   grafana_api_token_secret_arn = module.security_baseline.grafana_secret_arn
+  grafana_workspace_endpoint   = module.observability_audit.grafana_workspace_endpoint
+  audit_retention_days         = var.audit_retention_days
 
   prediction_role_arn        = module.security_baseline.prediction_role_arn
   serving_adapter_role_arn   = module.security_baseline.prediction_role_arn

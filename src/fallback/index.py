@@ -14,6 +14,7 @@ dynamodb = boto3.resource("dynamodb")
 audit_table = dynamodb.Table(os.environ["AUDIT_TABLE_NAME"])
 secretsmanager = boto3.client("secretsmanager")
 grafana_secret_arn = os.environ.get("GRAFANA_SECRET_ARN")
+grafana_workspace_endpoint = os.environ.get("GRAFANA_WORKSPACE_ENDPOINT")
 AMP_QUERY_ENDPOINT = os.environ["AMP_QUERY_ENDPOINT"]
 AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", 30))
 
@@ -220,9 +221,7 @@ def create_grafana_annotation(result, service_id, tenant_id, metrics):
         # Lấy Grafana API token từ Secrets Manager
         secret_response = secretsmanager.get_secret_value(SecretId=grafana_secret_arn)
         secret_string = secret_response["SecretString"]
-        grafana_config = json.loads(secret_string)
-        grafana_url = grafana_config.get("url", os.environ.get("GRAFANA_URL"))
-        grafana_token = grafana_config.get("token")
+        grafana_url, grafana_token = parse_grafana_secret(secret_string)
 
         if not grafana_url or not grafana_token:
             log_event("grafana_config_missing", {})
@@ -268,6 +267,30 @@ def create_grafana_annotation(result, service_id, tenant_id, metrics):
     except Exception as e:
         log_event("grafana_annotation_failed", {"error": str(e)})
         raise
+
+
+def parse_grafana_secret(secret_string):
+    grafana_url = grafana_workspace_endpoint or os.environ.get("GRAFANA_URL")
+    grafana_token = secret_string
+
+    try:
+        grafana_config = json.loads(secret_string)
+        grafana_url = grafana_config.get("url") or grafana_url
+        grafana_token = grafana_config.get("token") or grafana_config.get("api_token") or grafana_token
+    except json.JSONDecodeError:
+        pass
+
+    return normalize_grafana_url(grafana_url), grafana_token
+
+
+def normalize_grafana_url(grafana_url):
+    if not grafana_url:
+        return None
+
+    if grafana_url.startswith("http://") or grafana_url.startswith("https://"):
+        return grafana_url
+
+    return f"https://{grafana_url}"
 
 
 def write_audit(correlation_id, service_id, tenant_id, result, scheduled_at, is_fallback):

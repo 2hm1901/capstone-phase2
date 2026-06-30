@@ -4,10 +4,67 @@ resource "aws_ecs_cluster" "ai_engine" {
   tags = var.tags
 }
 
+data "aws_iam_policy_document" "ecs_task_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ai_engine_execution" {
+  name               = "${var.name_prefix}-ai-engine-execution-role"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+  description        = "Execution role for pulling AI Engine image from ECR and writing ECS logs."
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy" "ai_engine_execution" {
+  name = "${var.name_prefix}-ai-engine-execution-policy"
+  role = aws_iam_role.ai_engine_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowEcrAuth"
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowEcrImagePull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Tạo Application Load Balancer (ALB)
 resource "aws_lb" "ai_engine" {
   name               = "${var.name_prefix}-ai-engine-alb"
-  internal           = false  # TẠM THỜI: internal = false để dễ demo/test. Sau này có thể harden về internal/private path
+  internal           = false # TẠM THỜI: internal = false để dễ demo/test. Sau này có thể harden về internal/private path
   load_balancer_type = "application"
   security_groups    = [var.alb_security_group_id]
   subnets            = var.public_subnet_ids
@@ -15,11 +72,11 @@ resource "aws_lb" "ai_engine" {
 }
 
 resource "aws_lb_target_group" "ai_engine" {
-  name     = "${var.name_prefix}-ai-engine-tg"
-  port     = 8080
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
-  target_type = "ip"  # Vì dùng Fargate, target là IP
+  name        = "${var.name_prefix}-ai-engine-tg"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip" # Vì dùng Fargate, target là IP
 
   # Health check theo deployment contract
   health_check {
@@ -50,11 +107,11 @@ resource "aws_lb_listener" "ai_engine" {
 # Tạo Task Definition cho Fargate
 resource "aws_ecs_task_definition" "ai_engine" {
   family                   = "${var.name_prefix}-ai-engine"
-  network_mode             = "awsvpc"  # Bắt buộc với Fargate
+  network_mode             = "awsvpc" # Bắt buộc với Fargate
   requires_compatibilities = ["FARGATE"]
   cpu                      = "512"  # 0.5 vCPU
   memory                   = "1024" # 1GB RAM
-  execution_role_arn       = var.ai_engine_role_arn
+  execution_role_arn       = aws_iam_role.ai_engine_execution.arn
   task_role_arn            = var.ai_engine_role_arn
 
   container_definitions = jsonencode([
@@ -105,13 +162,13 @@ resource "aws_ecs_service" "ai_engine" {
   name            = "${var.name_prefix}-ai-engine-service"
   cluster         = aws_ecs_cluster.ai_engine.id
   task_definition = aws_ecs_task_definition.ai_engine.arn
-  desired_count   = 2  # Min 2 theo deployment contract
+  desired_count   = 2 # Min 2 theo deployment contract
   launch_type     = "FARGATE"
 
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [var.task_security_group_id]
-    assign_public_ip = false  # Task không cần public IP, nằm trong private subnet
+    assign_public_ip = false # Task không cần public IP, nằm trong private subnet
   }
 
   load_balancer {
@@ -146,7 +203,7 @@ resource "aws_appautoscaling_policy" "ai_engine_cpu" {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
     target_value       = 70
-    scale_in_cooldown  = 300  # 5 phút
-    scale_out_cooldown = 60   # 1 phút
+    scale_in_cooldown  = 300 # 5 phút
+    scale_out_cooldown = 60  # 1 phút
   }
 }
