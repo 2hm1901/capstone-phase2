@@ -40,7 +40,7 @@ variable "ai_engine_alb_ingress_cidrs" {
 variable "generator_image_uri" {
   description = "Full ECR URI for the synthetic generator image. Leave empty to create only ECR/cluster scaffolding."
   type        = string
-  default     = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:v1.0"
+  default     = ""
 }
 
 variable "generator_tenant_id" {
