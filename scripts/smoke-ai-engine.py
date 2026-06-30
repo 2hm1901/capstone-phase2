@@ -34,12 +34,19 @@ def main() -> int:
     health = request("GET", f"{ENDPOINT}/health")
     print(f"[health] status={health['status']} body={health['body'][:300]}")
 
+    end_time = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    start_time = end_time - timedelta(minutes=120)
     payload = {
         "signal_window": build_signal_window(),
         "context": {
             "tenant_id": TENANT_ID,
             "service_id": SERVICE_ID,
             "source": "cdo08-smoke-ai-engine",
+            "deployment_version": "smoke-test",
+            "time_range": {
+                "start_ts": start_time.isoformat().replace("+00:00", "Z"),
+                "end_ts": end_time.isoformat().replace("+00:00", "Z"),
+            },
         },
     }
     prediction = request("POST", f"{ENDPOINT}/v1/predict", payload)
