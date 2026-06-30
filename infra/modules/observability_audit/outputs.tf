@@ -13,6 +13,11 @@ output "grafana_workspace_id" {
   value       = local.grafana_workspace_id
 }
 
+output "grafana_workspace_endpoint" {
+  description = "Amazon Managed Grafana workspace endpoint. Null when Grafana is deferred."
+  value       = var.create_grafana_workspace ? aws_grafana_workspace.this[0].endpoint : null
+}
+
 output "grafana_secret_arn" {
   description = "Secrets Manager secret ARN holding the Grafana service-account token, owned by the security module. Null when deferred."
   value       = var.grafana_secret_arn

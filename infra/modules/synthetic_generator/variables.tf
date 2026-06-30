@@ -89,8 +89,14 @@ variable "service_list" {
   default     = "payment-gw,ledger,fraud-detector"
 }
 
+variable "scenario" {
+  description = "Single k6 scenario to run. Use 'all' to rotate through scenario_list during the bounded run."
+  type        = string
+  default     = "noisy_baseline"
+}
+
 variable "scenario_list" {
-  description = "Comma-separated list of test scenarios to run."
+  description = "Comma-separated list of test scenarios. Used when scenario is 'all' or as a fallback for older overrides."
   type        = string
   default     = "gradual_drift,sudden_spike,slow_leak,noisy_baseline"
 }
@@ -99,6 +105,12 @@ variable "emit_interval_seconds" {
   description = "Interval in seconds between telemetry emits per service/metric."
   type        = number
   default     = 60
+}
+
+variable "run_duration_seconds" {
+  description = "Bounded k6 run duration in seconds. Use 7200 for a 2-hour evidence window."
+  type        = number
+  default     = 600
 }
 
 # ---------------------------------------------------------------------------

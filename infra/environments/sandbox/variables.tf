@@ -55,8 +55,14 @@ variable "generator_service_list" {
   default     = "payment-gw,ledger,fraud-detector"
 }
 
+variable "generator_scenario" {
+  description = "Single k6 scenario to run. Use 'all' to rotate through generator_scenario_list."
+  type        = string
+  default     = "noisy_baseline"
+}
+
 variable "generator_scenario_list" {
-  description = "Comma-separated list of test scenarios."
+  description = "Comma-separated list of test scenarios for k6 fallback/rotation."
   type        = string
   default     = "gradual_drift,sudden_spike,slow_leak,noisy_baseline"
 }
@@ -65,6 +71,12 @@ variable "generator_emit_interval_seconds" {
   description = "Interval in seconds between telemetry emits per service/metric."
   type        = number
   default     = 60
+}
+
+variable "generator_run_duration_seconds" {
+  description = "Bounded k6 run duration in seconds. Use 7200 for a 2-hour evidence window."
+  type        = number
+  default     = 600
 }
 
 variable "generator_log_retention_days" {
@@ -108,7 +120,7 @@ variable "audit_ttl_enabled" {
 }
 
 variable "create_grafana_workspace" {
-  description = "Set false to use reference mode (existing workspace). Set true to attempt creating an Amazon Managed Grafana workspace."
+  description = "Set true to create a new Amazon Managed Grafana workspace. Requires IAM Identity Center (AWS_SSO) enabled in the account. Default false to avoid unintended billing; enable explicitly via -var='create_grafana_workspace=true' when ready. Set false to use reference mode with an existing workspace ID."
   type        = bool
   default     = false
 }

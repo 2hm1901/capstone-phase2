@@ -21,7 +21,7 @@
 #     --task-definition <task_definition_arn_from_output> \
 #     --launch-type FARGATE \
 #     --network-configuration "awsvpcConfiguration={subnets=[<private_subnet_id>],securityGroups=[<generator_sg_id>],assignPublicIp=DISABLED}" \
-#     --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"SCENARIO","value":"gradual_drift"}]}]}'
+#     --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"SCENARIO","value":"gradual_drift"},{"name":"RUN_DURATION_SECONDS","value":"7200"}]}]}'
 #
 # The task is designed as a run-once/on-demand job per test window; it does NOT
 # run 24/7 to contain costs.  Use the scheduled_task_rule (disabled by default)
@@ -213,7 +213,9 @@ locals {
       environment = [
         { name = "TENANT_ID", value = var.tenant_id },
         { name = "SERVICE_LIST", value = var.service_list },
+        { name = "SCENARIO", value = var.scenario },
         { name = "SCENARIO_LIST", value = var.scenario_list },
+        { name = "RUN_DURATION_SECONDS", value = tostring(var.run_duration_seconds) },
         { name = "EMIT_INTERVAL_SECONDS", value = tostring(var.emit_interval_seconds) },
         { name = "INGEST_API_ENDPOINT", value = var.ingest_api_endpoint },
         { name = "AWS_REGION", value = var.aws_region },

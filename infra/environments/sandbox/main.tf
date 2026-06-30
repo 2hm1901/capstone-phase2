@@ -42,8 +42,10 @@ module "synthetic_generator" {
   # Generator behaviour
   tenant_id             = var.generator_tenant_id
   service_list          = var.generator_service_list
+  scenario              = var.generator_scenario
   scenario_list         = var.generator_scenario_list
   emit_interval_seconds = var.generator_emit_interval_seconds
+  run_duration_seconds  = var.generator_run_duration_seconds
 
   ingest_api_endpoint = module.telemetry_ingest.api_endpoint
 
@@ -122,6 +124,7 @@ module "telemetry_ingest" {
   auth_mode           = "IAM"
   lambda_package_path = data.archive_file.ingest.output_path
   lambda_role_arn     = module.security_baseline.ingest_role_arn
+  lambda_role_name    = module.security_baseline.ingest_role_name
 
   lambda_timeout              = 10
   lambda_memory               = 256
@@ -144,6 +147,11 @@ output "ingest_api_endpoint" {
 output "ingest_auth_mode" {
   description = "Telemetry ingest API authentication mode."
   value       = module.telemetry_ingest.auth_mode
+}
+
+output "ingest_api_invoke_arn" {
+  description = "Telemetry ingest POST route ARN for execute-api:Invoke IAM policies."
+  value       = module.telemetry_ingest.api_invoke_arn
 }
 
 output "ingest_lambda_name" {
@@ -212,6 +220,9 @@ module "telemetry_store" {
 
   tags = local.common_tags
 }
+
+
+
 
 output "workload_vpc_id" {
   description = "ID of the synthetic workload/services VPC."
@@ -376,6 +387,11 @@ output "audit_table_arn" {
 output "grafana_workspace_id" {
   description = "Amazon Managed Grafana workspace ID (created or referenced). Null when Grafana is deferred."
   value       = module.observability_audit.grafana_workspace_id
+}
+
+output "grafana_workspace_endpoint" {
+  description = "Amazon Managed Grafana workspace endpoint. Null when Grafana is deferred."
+  value       = module.observability_audit.grafana_workspace_endpoint
 }
 
 output "annotation_audit_log_group_name" {
