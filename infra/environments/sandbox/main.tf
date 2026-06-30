@@ -367,6 +367,11 @@ output "grafana_workspace_id" {
   value       = module.observability_audit.grafana_workspace_id
 }
 
+output "grafana_workspace_endpoint" {
+  description = "Amazon Managed Grafana workspace endpoint. Null when Grafana is deferred."
+  value       = module.observability_audit.grafana_workspace_endpoint
+}
+
 output "annotation_audit_log_group_name" {
   description = "CloudWatch Logs log group for annotation/audit structured logs."
   value       = module.observability_audit.annotation_audit_log_group_name
