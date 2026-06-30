@@ -72,12 +72,14 @@ module "prediction" {
 
   # AI Engine runtime is implemented separately. Keep disabled until the endpoint
   # and Lambda packages are ready.
-  ai_engine_endpoint   = null
+  ai_engine_endpoint   = module.ai_engine.ai_engine_endpoint
   ai_engine_invoke_arn = null
 
   audit_table_arn              = module.observability_audit.audit_table_arn
   audit_table_name             = module.observability_audit.audit_table_name
   grafana_api_token_secret_arn = module.security_baseline.grafana_secret_arn
+  grafana_workspace_endpoint   = module.observability_audit.grafana_workspace_endpoint
+  audit_retention_days         = var.audit_retention_days
 
   prediction_role_arn        = module.security_baseline.prediction_role_arn
   serving_adapter_role_arn   = module.security_baseline.prediction_role_arn
@@ -88,6 +90,26 @@ module "prediction" {
   fallback_source_dir        = "${path.module}/${var.fallback_source_dir}"
 
   tags = local.common_tags
+}
+
+module "ai_engine" {
+  source = "../../modules/ai_engine"
+
+  name_prefix            = local.name_prefix
+  aws_region             = var.aws_region
+  vpc_id                 = module.networking.ai_engine_vpc_id
+  public_subnet_ids      = module.networking.ai_engine_public_subnet_ids
+  private_subnet_ids     = module.networking.ai_engine_private_subnet_ids
+  alb_security_group_id  = module.networking.ai_engine_alb_security_group_id
+  task_security_group_id = module.networking.ai_engine_task_security_group_id
+  ai_engine_role_arn     = module.security_baseline.ai_engine_role_arn
+  ai_engine_ecr_repo_url = module.security_baseline.ai_engine_ecr_repo_url
+  # THÊM: Truyền image tag đúng
+  ai_engine_image_tag  = "latest"
+  baseline_bucket_name = module.security_baseline.baseline_bucket_name
+  app_log_group_name   = module.security_baseline.ai_engine_app_log_group_name
+  audit_log_group_name = module.security_baseline.ai_engine_audit_log_group_name
+  tags                 = local.common_tags
 }
 
 data "archive_file" "ingest" {

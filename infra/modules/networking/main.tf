@@ -191,12 +191,58 @@ resource "aws_security_group" "ai_engine_task" {
   })
 }
 
+resource "aws_security_group" "ai_engine_vpc_endpoint" {
+  name        = "${var.name_prefix}-ai-engine-vpc-endpoint-sg"
+  description = "Security group for AI Engine interface VPC endpoints."
+  vpc_id      = aws_vpc.ai_engine.id
+
+  ingress {
+    description     = "Allow HTTPS from AI Engine ECS tasks to interface endpoints."
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ai_engine_task.id]
+  }
+
+  egress {
+    description = "Allow endpoint responses."
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.ai_engine_vpc_cidr]
+  }
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-ai-engine-vpc-endpoint-sg"
+  })
+}
+
+resource "aws_vpc_endpoint" "ai_engine_interface" {
+  for_each = toset([
+    "ecr.api",
+    "ecr.dkr",
+    "logs",
+  ])
+
+  vpc_id              = aws_vpc.ai_engine.id
+  service_name        = "com.amazonaws.${var.aws_region}.${each.value}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.ai_engine_private[*].id
+  security_group_ids  = [aws_security_group.ai_engine_vpc_endpoint.id]
+  private_dns_enabled = true
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-ai-engine-${replace(each.value, ".", "-")}-endpoint"
+    Role = "ai-engine-private-runtime-access"
+  })
+}
+
 resource "aws_security_group_rule" "ai_engine_alb_ingress_from_workload" {
   type              = "ingress"
-  description       = "Allow HTTPS to the AI Engine public ALB."
+  description       = "Allow HTTP to the AI Engine public ALB for demo/test."
   security_group_id = aws_security_group.ai_engine_alb.id
-  from_port         = 443
-  to_port           = 443
+  from_port         = 80
+  to_port           = 80
   protocol          = "tcp"
   cidr_blocks       = var.ai_engine_alb_ingress_cidrs
 }
@@ -213,7 +259,7 @@ resource "aws_security_group_rule" "ai_engine_alb_egress_to_task" {
 
 resource "aws_security_group_rule" "ai_engine_task_ingress_from_alb" {
   type                     = "ingress"
-  description              = "Allow FastAPI traffic from the internal ALB."
+  description              = "Allow FastAPI traffic from the AI Engine ALB."
   security_group_id        = aws_security_group.ai_engine_task.id
   from_port                = 8080
   to_port                  = 8080
