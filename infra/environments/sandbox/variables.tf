@@ -52,11 +52,17 @@ variable "generator_tenant_id" {
 variable "generator_service_list" {
   description = "Comma-separated list of service_id values the generator emits for."
   type        = string
-  default     = "payment-api,queue-worker,gateway-api"
+  default     = "payment-gw,ledger,fraud-detector"
+}
+
+variable "generator_scenario" {
+  description = "Single k6 scenario to run. Use 'all' to rotate through generator_scenario_list."
+  type        = string
+  default     = "noisy_baseline"
 }
 
 variable "generator_scenario_list" {
-  description = "Comma-separated list of test scenarios."
+  description = "Comma-separated list of test scenarios for k6 fallback/rotation."
   type        = string
   default     = "gradual_drift,sudden_spike,slow_leak,noisy_baseline"
 }
@@ -65,6 +71,12 @@ variable "generator_emit_interval_seconds" {
   description = "Interval in seconds between telemetry emits per service/metric."
   type        = number
   default     = 60
+}
+
+variable "generator_run_duration_seconds" {
+  description = "Bounded k6 run duration in seconds. Use 7200 for a 2-hour evidence window."
+  type        = number
+  default     = 600
 }
 
 variable "generator_log_retention_days" {
@@ -122,9 +134,9 @@ variable "prediction_service_list" {
     enabled             = optional(bool, true)
   }))
   default = [
-    { service_id = "payment-api", tenant_id = "tenant-cdo08-demo" },
-    { service_id = "queue-worker", tenant_id = "tenant-cdo08-demo" },
-    { service_id = "gateway-api", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "payment-gw", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "ledger", tenant_id = "tenant-cdo08-demo" },
+    { service_id = "fraud-detector", tenant_id = "tenant-cdo08-demo" },
   ]
 }
 
