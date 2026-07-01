@@ -36,6 +36,19 @@ Supported scenarios:
 - `slow_leak`
 - `noisy_baseline`
 
+The generator baselines for `cpu_usage_percent`, `memory_usage_percent`, `api_latency_ms`, and `queue_depth` are aligned to the average values from the AI team's baseline files in `external/ai-team-foresight-lens/engine-skeleton/baselines/*.json`.
+
+Scenario meaning:
+
+| Scenario | Purpose | Expected use |
+|---|---|---|
+| `noisy_baseline` | Normal traffic around baseline with small noise | Run first to prove no false-positive spam |
+| `gradual_drift` | Slow capacity drift from baseline | Best scenario for lead-time evidence |
+| `slow_leak` | Memory-only leak pattern | Use to test memory/OOM recommendation |
+| `sudden_spike` | Short 5-minute spike every 30 minutes | Use for incident detection, not for 15-minute lead-time evidence |
+
+Recommended clean evaluation sequence: run `noisy_baseline` for 2 hours, then run exactly one anomaly scenario for 2-3 hours. Avoid overlapping scenarios when collecting AI evidence because Prediction Lambda uses a 120-minute AMP lookback window.
+
 ## Runtime config
 
 | Env var | Default | Notes |

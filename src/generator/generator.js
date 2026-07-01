@@ -44,33 +44,39 @@ const metricTypes = [
   "api_latency_ms",
 ];
 
+const percentageMetricTypes = ["cpu_usage_percent", "memory_usage_percent", "db_connection_pool_pct", "cache_hit_rate_pct"];
+
+// The four metrics consumed by the AI Engine are aligned to the average values
+// from external/ai-team-foresight-lens/engine-skeleton/baselines/*.json.
+// The remaining synthetic signals do not exist in the AI baseline files and are
+// kept as CDO-side observability/fallback signals.
 const baselines = {
   "payment-gw": {
-    cpu_usage_percent: 32.0,
-    memory_usage_percent: 44.0,
+    cpu_usage_percent: 40.01,
+    memory_usage_percent: 40.03,
     active_connections: 780.0,
     db_connection_pool_pct: 18.0,
-    queue_depth: 8.0,
+    queue_depth: 525.70,
     cache_hit_rate_pct: 92.0,
-    api_latency_ms: 135.0,
+    api_latency_ms: 75.14,
   },
   ledger: {
-    cpu_usage_percent: 42.0,
-    memory_usage_percent: 52.0,
+    cpu_usage_percent: 21.24,
+    memory_usage_percent: 59.97,
     active_connections: 190.0,
     db_connection_pool_pct: 46.0,
-    queue_depth: 95.0,
+    queue_depth: 1880.15,
     cache_hit_rate_pct: 86.0,
-    api_latency_ms: 420.0,
+    api_latency_ms: 15.56,
   },
   "fraud-detector": {
-    cpu_usage_percent: 48.0,
-    memory_usage_percent: 58.0,
+    cpu_usage_percent: 27.54,
+    memory_usage_percent: 49.97,
     active_connections: 260.0,
     db_connection_pool_pct: 35.0,
-    queue_depth: 34.0,
+    queue_depth: 138.68,
     cache_hit_rate_pct: 81.0,
-    api_latency_ms: 310.0,
+    api_latency_ms: 250.23,
   },
 };
 
@@ -322,8 +328,8 @@ function calculateMetricValue(scenario, serviceId, metricType, elapsedMinutes) {
 
   if (scenario === "gradual_drift") {
     value = metricType === "cache_hit_rate_pct"
-      ? base * (1.0 - 0.002 * elapsedMinutes)
-      : base * (1.0 + 0.018 * elapsedMinutes);
+      ? base * (1.0 - 0.0008 * elapsedMinutes)
+      : base * (1.0 + 0.0025 * elapsedMinutes);
   } else if (scenario === "sudden_spike") {
     const cycleMinute = elapsedMinutes % 30.0;
     if (cycleMinute >= 15.0 && cycleMinute < 20.0) {
@@ -336,16 +342,20 @@ function calculateMetricValue(scenario, serviceId, metricType, elapsedMinutes) {
       }
     }
   } else if (scenario === "slow_leak" && metricType === "memory_usage_percent") {
-    value = base + 0.35 * elapsedMinutes;
+    value = base + 0.12 * elapsedMinutes;
   }
 
-  if (["cpu_usage_percent", "memory_usage_percent", "db_connection_pool_pct", "cache_hit_rate_pct"].includes(metricType)) {
-    value = Math.min(100.0, Math.max(0.0, value));
+  if (percentageMetricTypes.includes(metricType)) {
+    value = Math.min(percentCapForScenario(scenario), Math.max(0.0, value));
   } else {
     value = Math.max(0.0, value);
   }
 
   return Number(value.toFixed(2));
+}
+
+function percentCapForScenario(scenario) {
+  return scenario === "gradual_drift" ? 92.0 : 100.0;
 }
 
 function metricLabels(serviceId, metricType, scenario) {
