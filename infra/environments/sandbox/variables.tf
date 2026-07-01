@@ -40,7 +40,7 @@ variable "ai_engine_alb_ingress_cidrs" {
 variable "generator_image_uri" {
   description = "Full ECR URI for the synthetic generator image. Sandbox pins the current k6 image to avoid deleting the ECS task definition when applying unrelated changes."
   type        = string
-  default     = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-ai-baseline-20260702-1"
+  default     = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-phased-scenarios-20260702-1"
 }
 
 variable "generator_tenant_id" {

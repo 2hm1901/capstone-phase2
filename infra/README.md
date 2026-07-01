@@ -136,10 +136,10 @@ Deploy base runtime và tạo k6 task definition:
 
 ```bash
 terraform -chdir=infra/environments/sandbox plan \
-  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-ai-baseline-20260702-1'
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-phased-scenarios-20260702-1'
 
 terraform -chdir=infra/environments/sandbox apply \
-  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-ai-baseline-20260702-1'
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-phased-scenarios-20260702-1'
 ```
 
 Smoke test AI Engine qua SigV4 API Gateway:
