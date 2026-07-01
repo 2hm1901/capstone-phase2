@@ -105,12 +105,11 @@ module "ai_engine" {
   api_vpc_link_security_group_id = module.networking.ai_engine_api_vpc_link_security_group_id
   ai_engine_role_arn             = module.security_baseline.ai_engine_role_arn
   ai_engine_ecr_repo_url         = module.security_baseline.ai_engine_ecr_repo_url
-  # THÊM: Truyền image tag đúng
-  ai_engine_image_tag  = "amd64-20260701-1"
-  baseline_bucket_name = module.security_baseline.baseline_bucket_name
-  app_log_group_name   = module.security_baseline.ai_engine_app_log_group_name
-  audit_log_group_name = module.security_baseline.ai_engine_audit_log_group_name
-  tags                 = local.common_tags
+  ai_engine_image_tag            = "amd64-9a8dfd3-20260701"
+  baseline_bucket_name           = module.security_baseline.baseline_bucket_name
+  app_log_group_name             = module.security_baseline.ai_engine_app_log_group_name
+  audit_log_group_name           = module.security_baseline.ai_engine_audit_log_group_name
+  tags                           = local.common_tags
 }
 
 data "archive_file" "ingest" {
