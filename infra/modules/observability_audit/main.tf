@@ -74,14 +74,83 @@ resource "aws_dynamodb_table" "audit" {
 # var.grafana_secret_arn, so Terraform state never holds the token and there is
 # no ownership/duplicate conflict with the security module.
 # -----------------------------------------------------------------------------
+data "aws_iam_policy_document" "grafana_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["grafana.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "grafana_workspace" {
+  count = var.create_grafana_workspace ? 1 : 0
+
+  name               = "${var.name_prefix}-grafana-workspace-role"
+  assume_role_policy = data.aws_iam_policy_document.grafana_assume_role.json
+  description        = "Service role used by Amazon Managed Grafana to query CDO08 AMP data."
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-grafana-workspace-role"
+    Role = "grafana-workspace-service-role"
+  })
+}
+
+data "aws_iam_policy_document" "grafana_workspace" {
+  statement {
+    sid    = "ListPrometheusWorkspaces"
+    effect = "Allow"
+
+    actions = [
+      "aps:ListWorkspaces"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "QueryPrometheusWorkspace"
+    effect = "Allow"
+
+    actions = [
+      "aps:DescribeWorkspace",
+      "aps:GetLabels",
+      "aps:GetMetricMetadata",
+      "aps:GetSeries",
+      "aps:QueryMetrics"
+    ]
+
+    resources = var.amp_workspace_id != null ? [
+      "arn:aws:aps:${var.aws_region}:${data.aws_caller_identity.current.account_id}:workspace/${var.amp_workspace_id}"
+    ] : ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "grafana_workspace" {
+  count = var.create_grafana_workspace ? 1 : 0
+
+  name   = "${var.name_prefix}-grafana-workspace-policy"
+  role   = aws_iam_role.grafana_workspace[0].id
+  policy = data.aws_iam_policy_document.grafana_workspace.json
+}
+
 resource "aws_grafana_workspace" "this" {
   count                    = var.create_grafana_workspace ? 1 : 0
   name                     = local.grafana_workspace_name
   account_access_type      = "CURRENT_ACCOUNT"
   authentication_providers = ["AWS_SSO"]
   permission_type          = "SERVICE_MANAGED"
+  role_arn                 = aws_iam_role.grafana_workspace[0].arn
   data_sources             = var.amp_workspace_id != null ? ["PROMETHEUS"] : []
   description              = "CDO08 sandbox Grafana overlay for prediction/fallback annotations."
+
+  depends_on = [
+    aws_iam_role_policy.grafana_workspace
+  ]
 
   tags = merge(var.tags, {
     Name = local.grafana_workspace_name
