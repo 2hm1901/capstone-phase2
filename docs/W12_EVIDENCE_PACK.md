@@ -50,7 +50,7 @@ Theo `CAPSTONE_EVIDENCE_PACK_FORMAT.md`, CDO group cần đủ 7 docs. Các docs
 | Required file | Current status | Remaining action |
 |---|---|---|
 | `docs/01_requirements_analysis.md` | Updated for W12 final scope | Capture final evidence referenced by the doc |
-| `docs/02_infra_design.md` | Updated for W12 final topology and diagram | Add/acknowledge `active_connections` dashboard panel |
+| `docs/02_infra_design.md` | Updated for W12 final topology, diagram, and 7-metric dashboard | Capture final dashboard screenshot with `active_connections` panel |
 | `docs/03_security_design.md` | Updated with resolved W12 security decisions | Capture IAM/KMS/API Gateway/Secrets screenshots |
 | `docs/04_deployment_design.md` | Updated with actual module/source layout and deployment decisions | Capture final apply/smoke/rollback evidence |
 | `docs/05_cost_analysis.md` | Updated with current monthly forecast and capture plan | Add Cost Explorer/Budget screenshots |
@@ -68,7 +68,7 @@ Recommended: trước code freeze, attach các screenshot còn thiếu vào Jira
 | File | W12 status | Evidence còn thiếu |
 |---|---|---|
 | `docs/01_requirements_analysis.md` | Updated | None beyond final review |
-| `docs/02_infra_design.md` | Updated | Screenshot/caption of final diagram and active_connections panel decision |
+| `docs/02_infra_design.md` | Updated | Screenshot/caption of final diagram and Grafana dashboard with 7 metric panels |
 | `docs/03_security_design.md` | Updated | IAM/KMS/API Gateway/Secrets evidence screenshots |
 | `docs/04_deployment_design.md` | Updated | Terraform apply output, smoke test, ECS health evidence |
 | `docs/05_cost_analysis.md` | Updated | Cost Explorer/Budget screenshots |
@@ -78,7 +78,7 @@ Recommended: trước code freeze, attach các screenshot còn thiếu vào Jira
 
 | Area | Current note | Recommended action |
 |---|---|---|
-| Grafana dashboard | Dashboard chưa có panel `active_connections` dù contract/generator có metric này | Thêm panel hoặc ghi rõ gap trước demo. Best choice: thêm panel để đủ 7 metric theo contract |
+| Grafana dashboard | Dashboard JSON đã thêm panel `active_connections` để đủ 7 metric theo contract/generator | Re-provision Grafana dashboard and capture screenshot |
 | Cost explanation | NAT cost là driver lớn | Khi present, giải thích k6 ECS cần outbound public API Gateway/ECR/logs; AI VPC dùng endpoints/internal ALB nên không cần NAT |
 | ADR narrative | ADR đã updated tới ADR-019 | Không sửa/xóa ADR cũ; nếu có quyết định mới thì append ADR-020 |
 | README | README nên giữ high-level | Không đưa tình trạng Terraform chi tiết vào README tổng quát |
@@ -367,22 +367,19 @@ For clean evaluation, run **one scenario per window**. Avoid mixing `all` when m
 Dashboard: `CDO08 Foresight Lens Overview`  
 URL: `https://g-9411285a4b.grafana-workspace.us-east-1.amazonaws.com/d/cdo08-foresight-lens`
 
-Current panels observed:
+Current panels configured:
 
 - CPU usage
 - Memory usage
+- Active connections
 - API latency
 - Queue depth
 - DB connection pool
 - Cache hit rate
 
-### 8.2 Dashboard gap to fix or disclose
+### 8.2 Dashboard completeness
 
-Telemetry contract/generator also include `active_connections`. Current dashboard should add one more panel:
-
-- Active connections
-
-If not fixed before presentation, explicitly mark as known gap: metric is ingested and queryable, but not yet visualized as a dedicated panel.
+Telemetry contract/generator include 7 metrics, and the dashboard JSON now has one dedicated panel for each metric. Remaining evidence action: re-run `scripts/provision_grafana.py` after the dashboard JSON change and capture the updated Grafana screenshot.
 
 ### 8.3 How to interpret lines
 
@@ -573,7 +570,7 @@ Do not include screenshots with:
 |---|---|---|
 | Evidence screenshots not attached | Reviewer sees claims but not raw artifact | Capture screenshots listed in §13 |
 | Cost screenshot missing | W12 requires measured cost evidence | Add Cost Explorer/Budget screenshot |
-| Dashboard missing `active_connections` panel | Contract metric not fully visualized | Add panel before demo or disclose |
+| Dashboard `active_connections` screenshot not captured after JSON update | Reviewer may not see all 7 contract metrics visualized | Re-provision Grafana and capture updated dashboard screenshot |
 | Annotation spam fix needs final apply/evidence | Dashboard can look noisy | Apply latest Terraform/code and capture cooldown/stale skip evidence |
 | Precision/recall not fully measured | Hard requirement partially unproven | Build final scenario matrix; at minimum explain what was measured vs future work |
 | Fallback path evidence not captured | Hard requirement fail-open weak | Force controlled AI failure and capture fallback annotation/audit |
@@ -598,4 +595,4 @@ Use this sequence in presentation:
    - Fallback path.
    - Stale/cooldown dedupe to avoid alert spam.
 7. Cost: under `$200/month` only with guardrails; major drivers are AI ECS, ALB, NAT, endpoints, Grafana.
-8. Known gaps: active_connections panel, broader precision/recall matrix, production hardening.
+8. Known gaps: broader precision/recall matrix and production hardening.

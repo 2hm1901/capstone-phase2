@@ -662,7 +662,7 @@ Nội dung:
   - Cooldown/dedupe to avoid repeated 5-minute alerts.
   - Filter annotation by service/scenario on dashboard.
 - Prediction query should support `scenario` filter.
-- Dashboard should add `active_connections` panel if not yet added.
+- Dashboard should show all 7 contract metrics, including `active_connections`.
 - AI recommendations reference logical services; real ECS service mapping is future work.
 
 Ý cần nói:
@@ -740,4 +740,3 @@ Trước khi finalize deck, check:
 - [ ] Có known gaps/next steps.
 - [ ] Mỗi member có evidence thật.
 - [ ] Không expose secret/token trong screenshot.
-

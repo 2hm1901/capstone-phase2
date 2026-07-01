@@ -19,7 +19,7 @@ Luồng dữ liệu final gồm sáu bước.
 
 > **Trạng thái quyết định AI Engine:** Deployment Contract đã freeze lại theo đúng ownership: **mỗi CDO tự host AI Engine trên platform của mình** dựa trên artifact/spec AI bàn giao. CDO08 dùng ECS Fargate FastAPI runtime, internal ALB private path, API Gateway `AWS_IAM` SigV4 edge và baseline files trên S3.
 
-> **Dashboard note:** generator/writer hiện ingest đủ 7 metric theo contract, gồm `active_connections`. Grafana dashboard W12 đang có 6 panels chính; panel `active_connections` cần được thêm hoặc ghi rõ là visualization gap trong evidence pack.
+> **Dashboard note:** generator/writer hiện ingest đủ 7 metric theo contract, gồm `active_connections`. Grafana dashboard W12 đã có panel riêng cho 7 metric: CPU, memory, active connections, DB connection pool, queue depth, cache hit rate và API latency.
 
 CDO08 không chọn một “angle công nghệ” chỉ để khác hai CDO còn lại. Nhóm có thể dùng managed service giống họ, nhưng cần chứng minh platform đáng tin hơn bằng test và artifact: validation/retry/DLQ, correlation ID xuyên suốt, audit mã hóa, fallback test thật, IaC tái lập và cost guard.
 

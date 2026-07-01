@@ -117,16 +117,17 @@ Expected clean result:
 
 ### 4.3 AMP and Grafana
 
-Grafana dashboard đã hiển thị metric series từ AMP. Dashboard hiện có 6 panels:
+Grafana dashboard đã hiển thị metric series từ AMP. Dashboard hiện có 7 panels:
 
 - CPU usage
 - Memory usage
+- Active connections
 - API latency
 - Queue depth
 - DB connection pool
 - Cache hit rate
 
-Known gap: telemetry contract/generator có thêm `active_connections`, nhưng dashboard hiện chưa có panel riêng. Cần thêm panel này hoặc ghi rõ là visualization gap trong presentation.
+Dashboard đã được cập nhật để visualize đủ 7 metric theo telemetry contract/generator.
 
 ## 5. AI integration results
 
@@ -265,7 +266,7 @@ Recommendation cho final demo: chạy **3 services + 1 scenario** trong một wi
 - [ ] API Gateway AI route `AWS_IAM` + VPC Link.
 - [ ] Cost Explorer/Budget screenshot.
 - [ ] Fallback injected failure evidence.
-- [ ] Active connections panel added or acknowledged as visualization gap.
+- [ ] Active connections panel visible on Grafana after reprovisioning dashboard.
 
 ## Related documents
 
