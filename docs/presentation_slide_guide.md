@@ -319,6 +319,7 @@ Nội dung:
   - `sudden_spike`
   - `slow_leak`
 - Uses IAM SigV4 to call ingest API Gateway.
+- For anomaly scenarios, the generator runs 120 minutes of baseline warm-up before anomaly starts, so Grafana shows one continuous service/scenario line.
 
 Ý cần nói:
 
@@ -341,6 +342,7 @@ So sánh:
 
 - Chọn ECS Fargate vì cần chạy real-time 2 giờ để tạo AMP window.
 - Chọn k6 vì phù hợp synthetic load/telemetry generator hơn script thủ công.
+- Phased scenario giúp demo rõ hơn: baseline trước, sau đó mới spike/drift/leak trong cùng một ECS task.
 
 #### Slide - Evidence
 
@@ -349,6 +351,7 @@ Nội dung:
 - ECS task logs showing `metric_emit_result status=202`.
 - Grafana lines appear after generator runs.
 - k6 summary: `http_req_failed 0.00%`.
+- Final demo nên dùng `sudden_spike` hoặc `gradual_drift` với `ANOMALY_START_SECONDS=7200`.
 
 Ý cần nói:
 

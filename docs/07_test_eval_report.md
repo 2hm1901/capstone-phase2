@@ -70,6 +70,8 @@ ECS k6 generator đã chạy được real mode trong private subnet. Trong các
 - API response status `202`
 - service IDs khớp AI baseline: `payment-gw`, `ledger`, `fraud-detector`
 - scenario labels xuất hiện trên Grafana, ví dụ `payment-gw / sudden_spike`
+- final generator image tag cho phased scenario: `k6-phased-scenarios-20260702-1`
+- anomaly scenarios dùng `ANOMALY_START_SECONDS=7200`: 120 phút baseline warm-up trước khi bắt đầu drift/spike/leak.
 
 Command kiểm chứng:
 
@@ -82,7 +84,7 @@ aws logs tail /ecs/cdo08-sandbox-generator \
 
 Evidence cần chụp:
 
-- k6 summary sau 2h run.
+- k6 summary sau phased run, ví dụ `RUN_DURATION_SECONDS=10800` cho `sudden_spike`.
 - CloudWatch log có `metric_emit_result`, `status:202`, đủ 3 services.
 
 ### 4.2 Queue and DLQ
@@ -210,12 +212,12 @@ Evidence cần chụp:
 | Scenario | Services | Status | Notes |
 |---|---|---|---|
 | `noisy_baseline` | 3 services | Implemented and visible in Grafana | Dùng để chứng minh baseline/noise; cần capture false-positive count nếu muốn claim FP ≤12% |
-| `sudden_spike` | 3 services | Implemented and generated annotations | Dùng tốt nhất cho live demo anomaly/recommendation |
-| `gradual_drift` | 3 services | Implemented, needs final evidence | Dùng để đo lead time ≥15 phút |
-| `slow_leak` | 3 services | Implemented, needs final evidence | Dùng để demo memory/queue exhaustion |
+| `sudden_spike` | 3 services | Implemented and generated annotations | Phased run: 120 phút baseline, sau đó spike cycle; dùng tốt nhất cho live demo anomaly/recommendation |
+| `gradual_drift` | 3 services | Implemented, needs final evidence | Phased run: 120 phút baseline, sau đó drift; dùng để đo lead time ≥15 phút |
+| `slow_leak` | 3 services | Implemented, needs final evidence | Phased run: 120 phút baseline, sau đó memory leak; dùng để demo memory/OOM recommendation |
 | `all` | mixed | Implemented | Không nên dùng cho precision/recall chính thức vì ground truth khó giải thích |
 
-Recommendation cho final demo: chạy **3 services + 1 scenario** trong một window, ví dụ `sudden_spike`, để dashboard có 3 lines rõ ràng và annotation dễ giải thích.
+Recommendation cho final demo: chạy **3 services + 1 scenario** trong một window, ví dụ `sudden_spike`, với `ANOMALY_START_SECONDS=7200` và `RUN_DURATION_SECONDS=10800` để dashboard có baseline liền mạch, anomaly phase rõ ràng và annotation dễ giải thích.
 
 ## 8. SLO and acceptance evidence
 
@@ -231,6 +233,7 @@ Recommendation cho final demo: chạy **3 services + 1 scenario** trong một wi
 | Actionable recommendation | action + target + from→to + confidence + evidence | AI response/annotation contains these fields | Pass for observed samples |
 | Audit every prediction | DynamoDB audit + AI audit ID | Audit item query required | Evidence pending |
 | Fail-open fallback | Static threshold if AI down | Code path exists; fault injection screenshot required | Evidence pending |
+| Email notification | SNS email for prediction/fallback anomaly | SNS topic/subscription implemented; confirmation/e-mail screenshot required | Evidence pending |
 
 ## 9. Failure analysis
 
@@ -255,7 +258,7 @@ Recommendation cho final demo: chạy **3 services + 1 scenario** trong một wi
 
 ## 11. Final evidence checklist
 
-- [ ] k6 2h summary with `http_req_failed: 0.00%`.
+- [ ] k6 phased scenario summary with `http_req_failed: 0.00%`.
 - [ ] Grafana dashboard showing 3 services in one scenario.
 - [ ] Grafana annotation popup with recommendation.
 - [ ] DynamoDB audit item with matching correlation ID.
@@ -267,6 +270,7 @@ Recommendation cho final demo: chạy **3 services + 1 scenario** trong một wi
 - [ ] Cost Explorer/Budget screenshot.
 - [ ] Fallback injected failure evidence.
 - [ ] Active connections panel visible on Grafana after reprovisioning dashboard.
+- [ ] SNS subscription confirmed and prediction/fallback email alert received.
 
 ## Related documents
 

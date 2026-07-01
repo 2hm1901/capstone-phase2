@@ -391,7 +391,8 @@ Nếu forecast/actual cost đạt ngưỡng nguy hiểm:
 | Topic | Decision |
 |---|---|
 | AI image URI/tag | AI image is deployed from `894597652722.dkr.ecr.us-east-1.amazonaws.com/foresight-lens-engine` with immutable Terraform-managed tag, currently `amd64-9a8dfd3-20260701` |
-| Generator image | k6 generator runs from `894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator`, immutable tag managed through `generator_image_uri` |
+| Generator image | k6 generator runs from `894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator`, immutable tag managed through `generator_image_uri`, currently `k6-phased-scenarios-20260702-1` |
+| Generator scenario phasing | Anomaly scenarios use `ANOMALY_START_SECONDS=7200` by default: 120-minute baseline warm-up, then drift/spike/leak in the same ECS task and Grafana series |
 | Baseline S3 path | `s3://cdo08-sandbox-ai-baselines-894597652722/baselines/` |
 | AI networking | API Gateway `AWS_IAM` → VPC Link → internal ALB → ECS Fargate private subnet |
 | ADOT/OTel | Not deployed in W12; CloudWatch Logs/Metrics are used for capstone evidence |

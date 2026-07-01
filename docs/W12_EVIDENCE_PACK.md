@@ -325,7 +325,7 @@ From TF4 learner context:
 
 | Requirement | Evidence status | What to add |
 |---|---|---|
-| Test window ≥2h | k6 2h run observed | Capture final k6 summary screenshot |
+| Test window ≥2h | k6 real run observed; phased generator supports 120-minute baseline warm-up before anomaly | Capture final k6 summary screenshot |
 | Lead time ≥15 min before SLO breach | Needs explicit measurement | Mark spike threshold timestamp vs annotation timestamp in Grafana |
 | Multi-service ≥3 services | Implemented | Capture dashboard with 3 services in same scenario |
 | Per-service baseline | Implemented through service-specific baseline files | Capture S3 baseline bucket + service JSON files |
@@ -342,9 +342,9 @@ For clean evaluation, run **one scenario per window**. Avoid mixing `all` when m
 | Test | Services | Scenario | Duration | Expected outcome | Evidence |
 |---|---|---:|---:|---|---|
 | Baseline sanity | 3 | `noisy_baseline` | 2h or backfill + short real | Low/no annotations | Grafana + prediction logs |
-| Spike detection | 3 | `sudden_spike` | 2h | Anomaly annotations, action recommendation | Grafana popup + audit |
-| Gradual drift | 3 | `gradual_drift` | 2h | Early warning before breach | Annotation timestamp vs breach timestamp |
-| Slow leak | 3 | `slow_leak` | 2h | Memory/queue exhaustion warning | Grafana + audit |
+| Spike detection | 3 | `sudden_spike` | 3h recommended | 120m baseline then spike cycle, anomaly annotations, action recommendation | Grafana popup + audit |
+| Gradual drift | 3 | `gradual_drift` | 3-5h recommended | 120m baseline then drift; early warning before breach | Annotation timestamp vs breach timestamp |
+| Slow leak | 3 | `slow_leak` | 3-5h recommended | 120m baseline then memory leak warning | Grafana + audit |
 | AI failure | 1 | Any | short | fallback annotation/audit | Lambda logs + Grafana |
 | Stale telemetry | 1 | no generator | 30m after stop | no new spam annotations | Prediction logs show skip |
 
@@ -498,7 +498,7 @@ Use one scenario per evaluation window.
 CLUSTER_NAME="$(terraform -chdir=infra/environments/sandbox output -raw generator_cluster_name)"
 SUBNET_IDS="$(terraform -chdir=infra/environments/sandbox output -json workload_private_subnet_ids | jq -r 'join(",")')"
 SG_ID="$(terraform -chdir=infra/environments/sandbox output -raw generator_security_group_id)"
-OVERRIDES='{"containerOverrides":[{"name":"generator","environment":[{"name":"BACKFILL_MODE","value":"false"},{"name":"SCENARIO","value":"sudden_spike"},{"name":"RUN_DURATION_SECONDS","value":"7200"},{"name":"EMIT_INTERVAL_SECONDS","value":"60"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
+OVERRIDES='{"containerOverrides":[{"name":"generator","environment":[{"name":"BACKFILL_MODE","value":"false"},{"name":"SCENARIO","value":"sudden_spike"},{"name":"ANOMALY_START_SECONDS","value":"7200"},{"name":"RUN_DURATION_SECONDS","value":"10800"},{"name":"EMIT_INTERVAL_SECONDS","value":"60"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
 aws ecs run-task --region us-east-1 --cluster "$CLUSTER_NAME" --task-definition cdo08-sandbox-generator --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SG_ID],assignPublicIp=DISABLED}" --overrides "$OVERRIDES"
 ```
 
@@ -526,7 +526,7 @@ Expected output:
 
 | Member | Area | Evidence to collect |
 |---|---|---|
-| Thủy | Synthetic Generator ECS Fargate/k6 | ECR image tag, ECS run-task output, k6 2h summary, generator logs `status:202` |
+| Thủy | Synthetic Generator ECS Fargate/k6 | ECR image tag, ECS run-task output, phased k6 summary, generator logs `status:202` |
 | Phương | Telemetry Entry, SQS Buffer, DLQ | API Gateway auth, ingest Lambda validation, SQS queue drain, DLQ empty |
 | Nam | Telemetry Writer and AMP Store | Writer logs, AMP query, Grafana metric lines, no secret in logs |
 | Nhân | Prediction Scheduler, Serving Adapter, Fail-open | Scheduler invokes, Prediction Lambda logs, AI API success/fallback, stale/cooldown behavior |
@@ -543,7 +543,7 @@ Minimum set to collect before final presentation:
 - [ ] Terraform apply output after final code.
 - [ ] ECS AI Engine service healthy + target group healthy.
 - [ ] AI smoke test health/predict success.
-- [ ] k6 ECS 2h summary with `http_req_failed: 0.00%`.
+- [ ] k6 ECS phased scenario summary with `http_req_failed: 0.00%`.
 - [ ] Grafana dashboard showing 3 services in one scenario.
 - [ ] Grafana annotation popup with service/action/confidence/audit/correlation.
 - [ ] DynamoDB audit item for the same correlation ID.
@@ -552,7 +552,8 @@ Minimum set to collect before final presentation:
 - [ ] Security evidence: API Gateway IAM auth, Secrets Manager metadata, KMS key, IAM Identity Center/Grafana user.
 - [ ] Failure/fix evidence: old annotation spam vs new cooldown/stale skip behavior, or at least logs after fix.
 - [ ] Fallback evidence: AI timeout/503 route creates fallback audit/annotation.
-- [ ] Active connections panel or documented dashboard gap.
+- [ ] Active connections panel visible in Grafana.
+- [ ] SNS subscription confirmed and prediction/fallback email alert screenshot if email alert is claimed.
 
 Do not include screenshots with:
 

@@ -149,21 +149,31 @@ AI_ENGINE_ENDPOINT="$(terraform -chdir=infra/environments/sandbox output -raw ai
 python3 scripts/smoke-ai-engine.py
 ```
 
-Chạy k6 ECS đủ 2 giờ để tạo AMP window:
+Chạy k6 ECS theo phased scenario:
+
+- Mặc định `ANOMALY_START_SECONDS=7200`: 2 giờ đầu emit baseline-aligned telemetry.
+- Sau 2 giờ, scenario được chọn mới bắt đầu drift/spike/leak.
+- Với W12 evidence, nên chạy 3 services + 1 scenario trong cùng một ECS task để Grafana hiển thị line liền mạch và Prediction Lambda có 120 phút lookback sạch.
 
 Lệnh dưới đây cần `jq` để format subnet output. Nếu máy chưa có `jq`, copy `workload_private_subnet_ids` từ `terraform output` rồi điền thủ công vào `subnets=[...]`.
 
 ```bash
+CLUSTER_NAME="$(terraform -chdir=infra/environments/sandbox output -raw generator_cluster_name)"
+SUBNET_IDS="$(terraform -chdir=infra/environments/sandbox output -json workload_private_subnet_ids | jq -r 'join(",")')"
+SG_ID="$(terraform -chdir=infra/environments/sandbox output -raw generator_security_group_id)"
+
+OVERRIDES='{"containerOverrides":[{"name":"generator","environment":[{"name":"BACKFILL_MODE","value":"false"},{"name":"SCENARIO","value":"sudden_spike"},{"name":"ANOMALY_START_SECONDS","value":"7200"},{"name":"RUN_DURATION_SECONDS","value":"10800"},{"name":"EMIT_INTERVAL_SECONDS","value":"60"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
+
 aws ecs run-task \
   --region us-east-1 \
-  --cluster "$(terraform -chdir=infra/environments/sandbox output -raw generator_cluster_name)" \
+  --cluster "$CLUSTER_NAME" \
   --task-definition cdo08-sandbox-generator \
   --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[$(terraform -chdir=infra/environments/sandbox output -json workload_private_subnet_ids | jq -r 'join(",")')],securityGroups=[$(terraform -chdir=infra/environments/sandbox output -raw generator_security_group_id)],assignPublicIp=DISABLED}" \
-  --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"SCENARIO","value":"noisy_baseline"},{"name":"RUN_DURATION_SECONDS","value":"7200"},{"name":"EMIT_INTERVAL_SECONDS","value":"60"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SG_ID],assignPublicIp=DISABLED}" \
+  --overrides "$OVERRIDES"
 ```
 
-Sau khi AMP có đủ tối thiểu 120 phút data, bật prediction:
+Sau khi AMP có đủ tối thiểu 120 phút baseline data, bật prediction:
 
 ```bash
 terraform -chdir=infra/environments/sandbox plan \
@@ -214,7 +224,6 @@ Kiểm tra subscription:
 aws sns list-subscriptions-by-topic \
   --region us-east-1 \
   --topic-arn "$(terraform -chdir=infra/environments/sandbox output -raw email_alert_topic_arn)"
-```
 ```
 
 NAT Gateway phát sinh hourly cost. Nếu không chạy k6 ECS dài hạn, review plan/destroy cleanup sau test window theo quyết định PM.

@@ -112,6 +112,7 @@ Con số này thấp cho capstone. Prediction cost chủ yếu nằm ở Lambda 
 | AI Engine audit logs | Low volume, retention 1 year | ~$0–$3 initially | Long retention | Log only required audit fields |
 | Managed Grafana | 1 workspace/user minimum | ~$9–$30 | Active users/license | Minimal users/service accounts |
 | Secrets Manager/SSM/KMS | Few secrets/keys | ~$1–$5 | Secret/month + KMS requests | Avoid unnecessary secrets |
+| SNS email alerts | Prediction/fallback anomaly notifications | <$1 at demo volume | Email notifications, topic requests | Keep subscribers minimal; confirm only required recipients |
 | EventBridge Scheduler | ~25,920 invokes/month | ~$0 | Free tier likely covers | 5-min cadence |
 | VPC interface endpoints | ECR API, ECR DKR, Logs across 2 AZs | ~$40–$45 + data | Endpoint hourly per AZ | Keep only endpoints required by private ECS path |
 | NAT Gateway | 1 workload NAT when ECS k6 is used | ~$32.85 + data if left 24/7 | Hourly + data processing | Keep bounded to test window; review cleanup after demo |
