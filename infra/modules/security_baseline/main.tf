@@ -438,8 +438,11 @@ data "aws_iam_policy_document" "prediction" {
   }
 
   statement {
-    effect    = "Allow"
-    actions   = ["dynamodb:PutItem"]
+    effect = "Allow"
+    actions = [
+      "dynamodb:PutItem",
+      "dynamodb:Query"
+    ]
     resources = ["arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${var.name_prefix}-audit*"]
   }
 

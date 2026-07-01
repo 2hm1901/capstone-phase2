@@ -359,8 +359,10 @@ def should_publish_annotation(tenant_id, service_id, action, now):
             "tenant_id": tenant_id,
             "action": action,
             "error_type": type(error).__name__,
-            "error": str(error)
+            "error": str(error),
+            "decision": "suppress_annotation"
         })
+        return False
 
     return True
 
