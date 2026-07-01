@@ -167,12 +167,37 @@ Sau khi AMP có đủ tối thiểu 120 phút data, bật prediction:
 
 ```bash
 terraform -chdir=infra/environments/sandbox plan \
+  -var='enable_prediction=true'
+
+terraform -chdir=infra/environments/sandbox apply \
+  -var='enable_prediction=true'
+```
+
+Để tạo Amazon Managed Grafana workspace cùng lúc:
+
+```bash
+terraform -chdir=infra/environments/sandbox plan \
   -var='enable_prediction=true' \
-  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+  -var='create_grafana_workspace=true'
 
 terraform -chdir=infra/environments/sandbox apply \
   -var='enable_prediction=true' \
-  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+  -var='create_grafana_workspace=true'
+```
+
+Sau khi workspace tạo xong, tạo Grafana service-account token trong UI và lưu vào Secrets Manager:
+
+```bash
+aws secretsmanager put-secret-value \
+  --region us-east-1 \
+  --secret-id cdo08-sandbox-grafana-token \
+  --secret-string '{"url":"https://<grafana-workspace-endpoint>","token":"<grafana-service-account-token>"}'
+```
+
+Provision AMP datasource và dashboard:
+
+```bash
+python scripts/provision_grafana.py
 ```
 
 NAT Gateway phát sinh hourly cost. Nếu không chạy k6 ECS dài hạn, review plan/destroy cleanup sau test window theo quyết định PM.

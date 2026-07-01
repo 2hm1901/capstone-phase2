@@ -68,6 +68,8 @@ resource "aws_lambda_function" "prediction_lambda" {
       AMP_WORKSPACE_ID            = var.amp_workspace_id != null ? var.amp_workspace_id : "placeholder"
       AMP_QUERY_ENDPOINT          = var.amp_query_endpoint != null ? var.amp_query_endpoint : "placeholder"
       AUDIT_TABLE_NAME            = var.audit_table_name != null ? var.audit_table_name : "placeholder-audit"
+      GRAFANA_SECRET_ARN          = var.grafana_api_token_secret_arn != null ? var.grafana_api_token_secret_arn : ""
+      GRAFANA_WORKSPACE_ENDPOINT  = var.grafana_workspace_endpoint != null ? var.grafana_workspace_endpoint : ""
       SERVING_ADAPTER_LAMBDA_NAME = local.serving_adapter_lambda_name
       LOOKBACK_MINUTES            = tostring(var.lookback_minutes)
       PREDICTION_INTERVAL_MINUTES = tostring(var.prediction_interval_minutes)

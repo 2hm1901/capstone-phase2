@@ -5,6 +5,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 import boto3
 import botocore
 from botocore.auth import SigV4Auth
@@ -127,7 +128,7 @@ def query_instant_metric(metric_type, tenant_id, service_id, at_time):
         "time": str(at_unix)
     })
 
-    url = f"{AMP_QUERY_ENDPOINT.rstrip('/')}/api/v1/query?{query_params}"
+    url = f"{amp_api_base_url()}/api/v1/query?{query_params}"
 
     # Sign request với SigV4 dùng botocore
     headers = sign_request_with_botocore(
@@ -293,13 +294,21 @@ def normalize_grafana_url(grafana_url):
     return f"https://{grafana_url}"
 
 
+def amp_api_base_url():
+    endpoint = AMP_QUERY_ENDPOINT.rstrip("/")
+    for suffix in ("/api/v1/query_range", "/api/v1/query"):
+        if endpoint.endswith(suffix):
+            return endpoint[: -len(suffix)]
+    return endpoint
+
+
 def write_audit(correlation_id, service_id, tenant_id, result, scheduled_at, is_fallback):
     prediction_id = correlation_id  # Dùng correlation_id làm prediction_id
     tenant_service = f"{tenant_id}#{service_id}"
     now = datetime.now(timezone.utc)
     expires_at = int((now + timedelta(days=AUDIT_RETENTION_DAYS)).timestamp())
 
-    audit_table.put_item(Item={
+    audit_table.put_item(Item=to_dynamodb_safe({
         "tenant_service": tenant_service,       # Partition key (BẮT BUỘC)
         "prediction_id": prediction_id,         # Sort key (BẮT BUỘC)
         "correlation_id": correlation_id,       # Dùng cho GSI
@@ -310,7 +319,17 @@ def write_audit(correlation_id, service_id, tenant_id, result, scheduled_at, is_
         "scheduled_at": scheduled_at,
         "timestamp": now.isoformat(),
         "expires_at": expires_at                # TTL attribute
-    })
+    }))
+
+
+def to_dynamodb_safe(value):
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {key: to_dynamodb_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [to_dynamodb_safe(item) for item in value]
+    return value
 
 
 def log_event(event_name, details):

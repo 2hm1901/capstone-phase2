@@ -5,6 +5,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 import boto3
 import botocore
 from botocore.auth import SigV4Auth
@@ -12,11 +13,14 @@ from botocore.awsrequest import AWSRequest
 
 lambda_client = boto3.client("lambda")
 dynamodb = boto3.resource("dynamodb")
+secretsmanager = boto3.client("secretsmanager")
 audit_table = dynamodb.Table(os.environ["AUDIT_TABLE_NAME"])
 AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", 30))
 SERVING_ADAPTER_LAMBDA_NAME = os.environ["SERVING_ADAPTER_LAMBDA_NAME"]
 AMP_QUERY_ENDPOINT = os.environ["AMP_QUERY_ENDPOINT"]
 LOOKBACK_MINUTES = int(os.environ.get("LOOKBACK_MINUTES", 120))
+GRAFANA_SECRET_ARN = os.environ.get("GRAFANA_SECRET_ARN")
+GRAFANA_WORKSPACE_ENDPOINT = os.environ.get("GRAFANA_WORKSPACE_ENDPOINT")
 # Danh sách các metric types cần query (theo telemetry contract)
 METRIC_TYPES = [
     "cpu_usage_percent",
@@ -64,8 +68,19 @@ def handler(event, context):
             }
         })
 
+        annotation_id = None
+        if response.get("anomaly") is True:
+            annotation_id = publish_prediction_annotation(
+                result=response,
+                service_id=service_id,
+                tenant_id=tenant_id,
+                correlation_id=correlation_id,
+                start_time=start_time,
+                end_time=end_time
+            )
+
         # Bước 3: Ghi audit
-        write_audit(correlation_id, service_id, tenant_id, response, scheduled_at, False)
+        write_audit(correlation_id, service_id, tenant_id, response, scheduled_at, False, annotation_id)
 
         log_event("prediction_completed", {
             "correlation_id": correlation_id
@@ -125,7 +140,7 @@ def query_metric_from_amp(metric_type, tenant_id, service_id, start_time, end_ti
         "step": "60s"  # Lấy mẫu mỗi 60 giây
     })
 
-    url = f"{AMP_QUERY_ENDPOINT.rstrip('/')}/api/v1/query_range?{query_params}"
+    url = f"{amp_api_base_url()}/api/v1/query_range?{query_params}"
 
     # Sign request với SigV4 dùng botocore
     headers = sign_request_with_botocore(
@@ -207,13 +222,99 @@ def invoke_serving_adapter(payload):
     return json.loads(response["Payload"].read())
 
 
-def write_audit(correlation_id, service_id, tenant_id, result, scheduled_at, is_fallback):
+def publish_prediction_annotation(result, service_id, tenant_id, correlation_id, start_time, end_time):
+    if not GRAFANA_SECRET_ARN or not GRAFANA_WORKSPACE_ENDPOINT:
+        log_event("grafana_annotation_skipped", {
+            "correlation_id": correlation_id,
+            "reason": "grafana_not_configured"
+        })
+        return None
+
+    try:
+        grafana_token = get_grafana_token()
+        recommendation = result.get("recommendation") or {}
+        severity = result.get("severity")
+        annotation_payload = {
+            "time": int(start_time.timestamp() * 1000),
+            "timeEnd": int(end_time.timestamp() * 1000),
+            "tags": [
+                "prediction",
+                f"tenant:{tenant_id}",
+                f"service:{service_id}",
+                f"anomaly:{result.get('anomaly')}",
+                f"action:{recommendation.get('action_verb', 'none')}",
+            ],
+            "text": "\n".join([
+                "Prediction anomaly",
+                f"Service: {service_id}",
+                f"Tenant: {tenant_id}",
+                f"Severity: {severity}",
+                f"Action: {recommendation.get('action_verb')}",
+                f"Target: {recommendation.get('target')}",
+                f"Confidence: {recommendation.get('confidence')}",
+                f"Reasoning: {result.get('reasoning')}",
+                f"Audit ID: {result.get('audit_id')}",
+                f"Correlation ID: {correlation_id}",
+            ]),
+        }
+
+        request = urllib.request.Request(
+            url=f"{normalize_grafana_url(GRAFANA_WORKSPACE_ENDPOINT).rstrip('/')}/api/annotations",
+            data=json.dumps(annotation_payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {grafana_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(request, timeout=10) as response:
+            body = json.loads(response.read() or "{}")
+            annotation_id = body.get("id")
+            log_event("grafana_annotation_created", {
+                "correlation_id": correlation_id,
+                "annotation_id": annotation_id
+            })
+            return annotation_id
+    except Exception as error:
+        log_event("grafana_annotation_failed", {
+            "correlation_id": correlation_id,
+            "error_type": type(error).__name__,
+            "error": str(error)
+        })
+        return None
+
+
+def get_grafana_token():
+    secret = secretsmanager.get_secret_value(SecretId=GRAFANA_SECRET_ARN)["SecretString"]
+    try:
+        parsed = json.loads(secret)
+        return parsed.get("token") or parsed.get("api_token") or secret
+    except json.JSONDecodeError:
+        return secret
+
+
+def normalize_grafana_url(value):
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    return f"https://{value}"
+
+
+def amp_api_base_url():
+    endpoint = AMP_QUERY_ENDPOINT.rstrip("/")
+    for suffix in ("/api/v1/query_range", "/api/v1/query"):
+        if endpoint.endswith(suffix):
+            return endpoint[: -len(suffix)]
+    return endpoint
+
+
+def write_audit(correlation_id, service_id, tenant_id, result, scheduled_at, is_fallback, grafana_annotation_id=None):
     prediction_id = correlation_id  # Dùng correlation_id làm prediction_id
     tenant_service = f"{tenant_id}#{service_id}"
     now = datetime.now(timezone.utc)
     expires_at = int((now + timedelta(days=AUDIT_RETENTION_DAYS)).timestamp())
 
-    audit_table.put_item(Item={
+    item = {
         "tenant_service": tenant_service,       # Partition key (BẮT BUỘC)
         "prediction_id": prediction_id,         # Sort key (BẮT BUỘC)
         "correlation_id": correlation_id,       # Dùng cho GSI
@@ -224,7 +325,21 @@ def write_audit(correlation_id, service_id, tenant_id, result, scheduled_at, is_
         "scheduled_at": scheduled_at,
         "timestamp": now.isoformat(),
         "expires_at": expires_at                # TTL attribute
-    })
+    }
+    if grafana_annotation_id is not None:
+        item["grafana_annotation_id"] = str(grafana_annotation_id)
+
+    audit_table.put_item(Item=to_dynamodb_safe(item))
+
+
+def to_dynamodb_safe(value):
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {key: to_dynamodb_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [to_dynamodb_safe(item) for item in value]
+    return value
 
 
 def log_event(event_name, details):
