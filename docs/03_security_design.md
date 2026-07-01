@@ -23,7 +23,7 @@ EventBridge Scheduler → Prediction Lambda → AMP + AI Engine Runtime do CDO08
 
 API Gateway là public entry point duy nhất cho synthetic generator gửi telemetry. Nó không cho phép anonymous caller: generator dùng IAM authorization hoặc cơ chế auth được freeze trong Telemetry Contract. API Gateway chỉ nhận HTTPS; request body bị giới hạn kích thước và bị throttling để một generator lỗi không làm cạn tài nguyên platform.
 
-Fargate generator không cần public inbound port. Lambda ingest, writer, prediction và fallback không expose HTTP endpoint công khai. Prediction Lambda chỉ gọi AWS managed services và **AI Engine Runtime do CDO08 host**. Deployment Contract hiện xác định AI Engine runtime là ECS Fargate FastAPI, ALB HTTPS ingress, ECS task trong private subnet và auth IAM SigV4. CDO08 host model serving trong platform của mình theo artifact/spec AI bàn giao. Nếu Lambda được đặt trong VPC, CDO08 chỉ thêm VPC endpoint/NAT/routing khi thực sự cần để reach engine và AWS services; không tạo NAT Gateway chỉ để “trông production” vì có thể vượt budget capstone.
+Fargate generator không cần public inbound port. Lambda ingest, writer, prediction và fallback không expose HTTP endpoint công khai. Prediction Lambda chỉ gọi AWS managed services và **AI Engine Runtime do CDO08 host**. Deployment Contract hiện xác định AI Engine runtime là ECS Fargate FastAPI, AI API Gateway `AWS_IAM` edge, VPC Link tới internal ALB, ECS task trong private subnet và auth IAM SigV4 tại edge layer. CDO08 host model serving trong platform của mình theo artifact/spec AI bàn giao. Implementation hiện tại giữ Serving Adapter Lambda ngoài VPC và gọi AI API Gateway bằng SigV4; workload VPC chỉ có một NAT Gateway cho ECS k6 outbound trong test window, còn AI VPC dùng VPC endpoints cho S3/ECR/CloudWatch Logs thay vì NAT.
 
 Security group chỉ áp dụng cho Fargate/VPC resources thực sự dùng security group. AMP, SQS, DynamoDB, EventBridge Scheduler, API Gateway và Lambda được kiểm soát chủ yếu bằng IAM/resource policy thay vì security group. Đây là lý do không dùng mẫu ALB/RDS security group của template cho kiến trúc serverless này.
 
@@ -33,9 +33,9 @@ Security group chỉ áp dụng cho Fargate/VPC resources thực sự dùng secu
 |---|---|---|
 | Telemetry ingress | API Gateway HTTPS, IAM auth, request size limit, throttling | API config/Terraform và reject test |
 | Generator access | Fargate task role chỉ có `execute-api:Invoke` cho ingest endpoint | IAM policy và denied-call test |
-| Engine access | Prediction Lambda gọi AI Engine Runtime qua HTTPS ALB bằng IAM SigV4; ECS task không public IP | Network/IAM config, SG review và denied-auth test |
+| Engine access | Serving Adapter Lambda gọi AI Engine Runtime qua AI API Gateway `AWS_IAM` bằng SigV4; API Gateway dùng VPC Link tới internal ALB; ECS task không public IP | Network/IAM config, SG review và denied-auth test |
 | Service egress | Chỉ HTTPS tới AWS services/AI Engine path được phép | Lambda config, IAM policy, endpoint decision |
-| Public exposure | Chỉ ALB của AI Engine có HTTPS ingress; Fargate/Lambda/AMP/DynamoDB/SQS không public inbound, ECS task không public IP | Architecture/terraform review |
+| Public exposure | Public HTTPS entry chỉ là API Gateway ingest và AI API Gateway `AWS_IAM`; AI ALB là internal, Fargate/Lambda/AMP/DynamoDB/SQS không public inbound, ECS task không public IP | Architecture/terraform review |
 | Dependency failure | Telemetry SQS DLQ và Lambda/Scheduler CloudWatch alarm tách riêng | DLQ config và injected-failure test |
 
 ## 2. IAM và access control
@@ -97,7 +97,7 @@ AMP customer-managed KMS key không là default của CDO08. Nếu bật CMK, Gr
 - Generator gọi API Gateway qua HTTPS; API Gateway từ chối HTTP.
 - Lambda gọi AMP, Secrets Manager, DynamoDB, Grafana và AI Engine Runtime nội bộ qua TLS/HTTPS hoặc AWS private path theo contract.
 - Không truyền secret qua query string, annotation text hoặc audit log.
-- AI Engine auth/TLS/network rule theo Deployment Contract: IAM SigV4, HTTPS ALB ingress, ECS task private, no API key.
+- AI Engine auth/TLS/network rule theo Deployment Contract: AI API Gateway `AWS_IAM`, VPC Link tới internal ALB, ECS task private, no API key.
 
 ## 5. Audit logging và PII handling
 
@@ -136,7 +136,7 @@ SOC2/GDPR/PCI certification không nằm trong scope. PCI card data đặc biệ
 
 - [x] AI Engine compute/runtime ownership? — *Deployment Contract 25/06/2026: mỗi CDO tự host ECS Fargate FastAPI model serving trên platform riêng; AI không host endpoint tập trung.*
 - [x] Engine auth/path/health? — *Deployment Contract: IAM SigV4, per-CDO internal endpoint, `/v1/predict`, `/health`, port 8080.*
-- [x] CDO08 VPC/subnet/security group/ALB path cho AI Engine chốt chưa? — *Chốt theo diagram mới: public ALB ingress, ECS task private subnet, không VPC peering.*
+- [x] CDO08 VPC/subnet/security group/ALB path cho AI Engine chốt chưa? — *Chốt theo contract: AI API Gateway `AWS_IAM` edge, VPC Link tới internal ALB, ECS task private subnet, Serving Adapter Lambda ngoài VPC gọi API Gateway bằng SigV4, không VPC peering.*
 - [ ] AI image/artifact URI, immutable tag/digest và baseline S3 path cụ thể là gì? — *Resolve with AI owner before W12 integration test.*
 - [ ] AI Deployment Contract yêu cầu `OTel endpoint` per CDO platform. CDO08 có cần deploy ADOT/OpenTelemetry collector endpoint không, hay chỉ dùng CloudWatch/X-Ray đủ cho capstone? — *Resolve with AI owner before W12 integration test.*
 - [ ] API Gateway ingest dùng IAM auth hay API key/HMAC cho generator? — *Tech Lead resolve before Terraform apply.*

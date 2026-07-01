@@ -144,7 +144,7 @@ ADR là log các quyết định kiến trúc có trade-off thật. File này ap
 - **Status:** Accepted
 - **Date:** 2026-06-25
 - **Context:** Deployment Contract sau khi được AI sửa xác nhận mỗi CDO tự host AI Engine trên platform riêng. AI bàn giao artifact/spec, CDO deploy engine và expose endpoint riêng theo contract.
-- **Decision:** CDO08 host AI Engine Runtime bằng ECS Fargate stateless FastAPI, public HTTPS ALB ingress, ECS task trong private subnet, port 8080, `/health`, `POST /v1/predict`, IAM SigV4, baseline storage trên S3 mã hóa KMS.
+- **Decision:** CDO08 host AI Engine Runtime bằng ECS Fargate stateless FastAPI, AI API Gateway `AWS_IAM` + VPC Link tới internal ALB, ECS task trong private subnet, port 8080, `/health`, `POST /v1/predict`, IAM SigV4, baseline storage trên S3 mã hóa KMS.
 - **Consequence:**
   - ✅ Khớp contract và ownership CDO/CDO platform.
   - ✅ Container FastAPI phù hợp ECS Fargate và rollout/rollback bằng ECS task definition/CodeDeploy.

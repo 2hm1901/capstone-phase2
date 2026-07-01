@@ -16,7 +16,35 @@ infra/
 
 `bootstrap` là administrative setup, không phải một môi trường ứng dụng. State local của bootstrap chỉ dùng để tạo state bucket lần đầu; không commit file state này.
 
-Module hiện có trong repo là `modules/networking`. Các module Terraform khác chỉ được thêm khi có Jira task/PR tương ứng, để tránh nhiều người tạo trùng cùng một resource.
+Module Terraform chỉ được thêm hoặc sửa khi có Jira task/PR tương ứng, để tránh nhiều người tạo trùng cùng một resource. Các module app dùng chung IAM/KMS/secret/network output từ module nền tảng thay vì tự tạo lại.
+
+## Quy chuẩn Lambda source code
+
+Source code Lambda nằm trong `src/<lambda-name>/`, không nằm trong `infra/` và không commit file `.zip`.
+
+```text
+src/
+├── ingest/             # Lambda Telemetry Ingest, handler index.handler
+├── writer/             # Lambda Telemetry Writer, handler handler.handler
+├── prediction/         # Lambda Prediction, handler index.handler
+├── serving_adapter/    # Lambda Serving Adapter, handler index.handler
+└── fallback/           # Lambda Fallback, handler index.handler
+```
+
+Terraform package Lambda bằng `archive_file` khi chạy `plan/apply`:
+
+- Ingest: package từ `src/ingest`.
+- Writer: package từ `src/writer`.
+- Prediction/Serving Adapter/Fallback: package từ `src/prediction`, `src/serving_adapter`, `src/fallback` khi `enable_prediction=true`.
+
+Quy tắc khi sửa hoặc thêm Lambda:
+
+- Sửa code trong `src/<lambda-name>/`, không sửa trực tiếp trong `.terraform/` hoặc AWS Console.
+- Không commit `build/`, `.terraform/`, `*.zip`, `*.tfplan`.
+- Handler phải khớp file code: `index.py` dùng `index.handler`, `handler.py` dùng `handler.handler`.
+- IAM role lấy từ `infra/modules/security_baseline`; không tự tạo role riêng trong module Lambda nếu không có task/security review.
+- Secret value không được để trong source, Terraform variable, Lambda environment plaintext hoặc log. Chỉ truyền secret ARN/name rồi đọc từ Secrets Manager khi runtime cần.
+- Nếu Lambda cần dependency ngoài chuẩn library, thêm bước build rõ trong PR. Artifact build vẫn không được commit; source và lockfile/config build mới là source of truth.
 
 ## Bước 0: kiểm tra AWS user (mọi thành viên)
 
@@ -99,6 +127,55 @@ terraform -chdir=infra/environments/sandbox apply
 ```
 
 Không chạy `make tf-apply` hoặc `terraform apply` từ feature branch khi chưa có review plan. Nếu task phụ thuộc resource của người khác chưa merge, dùng `terraform output`, data source hoặc biến input rõ ràng sau khi PR phụ thuộc đã merge; không tạo lại resource thuộc owner khác.
+
+## Runbook W12: chạy k6 ECS và AI Engine
+
+AI Engine dùng API Gateway `AWS_IAM` làm SigV4 edge, VPC Link tới internal ALB và ECS task trong private subnet. K6 generator chạy bằng ECS Fargate trong workload private subnet; workload VPC có NAT Gateway để task pull ECR image, ghi CloudWatch Logs và gọi API Gateway ingest.
+
+Deploy base runtime và tạo k6 task definition:
+
+```bash
+terraform -chdir=infra/environments/sandbox plan \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+
+terraform -chdir=infra/environments/sandbox apply \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+```
+
+Smoke test AI Engine qua SigV4 API Gateway:
+
+```bash
+AI_ENGINE_ENDPOINT="$(terraform -chdir=infra/environments/sandbox output -raw ai_engine_endpoint)" \
+python3 scripts/smoke-ai-engine.py
+```
+
+Chạy k6 ECS đủ 2 giờ để tạo AMP window:
+
+Lệnh dưới đây cần `jq` để format subnet output. Nếu máy chưa có `jq`, copy `workload_private_subnet_ids` từ `terraform output` rồi điền thủ công vào `subnets=[...]`.
+
+```bash
+aws ecs run-task \
+  --region us-east-1 \
+  --cluster "$(terraform -chdir=infra/environments/sandbox output -raw generator_cluster_name)" \
+  --task-definition cdo08-sandbox-generator \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$(terraform -chdir=infra/environments/sandbox output -json workload_private_subnet_ids | jq -r 'join(",")')],securityGroups=[$(terraform -chdir=infra/environments/sandbox output -raw generator_security_group_id)],assignPublicIp=DISABLED}" \
+  --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"SCENARIO","value":"noisy_baseline"},{"name":"RUN_DURATION_SECONDS","value":"7200"},{"name":"EMIT_INTERVAL_SECONDS","value":"60"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
+```
+
+Sau khi AMP có đủ tối thiểu 120 phút data, bật prediction:
+
+```bash
+terraform -chdir=infra/environments/sandbox plan \
+  -var='enable_prediction=true' \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+
+terraform -chdir=infra/environments/sandbox apply \
+  -var='enable_prediction=true' \
+  -var='generator_image_uri=894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1'
+```
+
+NAT Gateway phát sinh hourly cost. Nếu không chạy k6 ECS dài hạn, review plan/destroy cleanup sau test window theo quyết định PM.
 
 ## Quy ước làm việc
 

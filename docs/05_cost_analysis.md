@@ -14,7 +14,7 @@ CDO08 cần chứng minh platform Foresight Lens có thể chạy dưới rough 
 2. Internal ALB cho AI Engine.
 3. Amazon Managed Grafana user/workspace.
 4. CloudWatch logs/alarms.
-5. NAT Gateway nếu bị tạo nhầm hoặc tạo quá sớm.
+5. NAT Gateway của workload VPC nếu để chạy 24/7 ngoài test window.
 6. Telemetry ingestion volume nếu sampling interval quá dày.
 
 Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo `3 services × 7 metrics × 60s` thì AMP ingest/query cost dự kiến thấp. Rủi ro chỉ tăng mạnh nếu sampling giảm xuống 10s/1s hoặc volume tiến gần mức contract peak.
@@ -24,7 +24,7 @@ Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo 
 | Assumption | Value | Note |
 |---|---:|---|
 | AWS region | `us-east-1` | Region đã cấu hình cho shared sandbox account |
-| Services demo | 3 | `payment-api`, `queue-worker`, `gateway-api` |
+| Services demo | 3 | `payment-gw`, `ledger`, `fraud-detector` |
 | Metrics/service | 7 | Theo Telemetry Contract |
 | Telemetry emit interval | 60s | 1 data point/phút/metric/service |
 | Prediction interval | 5 phút/service | EventBridge Scheduler |
@@ -33,7 +33,7 @@ Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo 
 | AI Engine replicas | min 2, max 4 | Forecast dùng min 2 chạy 24/7 |
 | AI algorithm | Statistical time-series, không Bedrock LLM | Không có Bedrock inference cost |
 | Generator runtime | Chỉ chạy test window | Không chạy 24/7 nếu không cần |
-| NAT Gateway | Avoid by default | Chỉ dùng nếu private connectivity bắt buộc |
+| NAT Gateway | 1 workload NAT trong test window | ECS k6 chạy private subnet cần outbound để pull image, ghi logs và gọi API Gateway ingest |
 
 ## 3. Telemetry volume estimate
 
@@ -113,9 +113,9 @@ Con số này thấp cho capstone. Prediction cost chủ yếu nằm ở Lambda 
 | Managed Grafana | 1 workspace/user minimum | ~$9–$30 | Active users/license | Minimal users/service accounts |
 | Secrets Manager/SSM/KMS | Few secrets/keys | ~$1–$5 | Secret/month + KMS requests | Avoid unnecessary secrets |
 | EventBridge Scheduler | ~25,920 invokes/month | ~$0 | Free tier likely covers | 5-min cadence |
-| NAT Gateway | Avoided by default | $0 if avoided; can add $30–$70+ | Hourly + data processing | Do not create unless required |
-| **Total forecast** | Without NAT | **~$70–$135/month** | Mostly Fargate + ALB + Grafana + logs | Under $200 if guardrails enforced |
-| **Worst likely if NAT added** | One NAT 24/7 | **~$110–$200+** | NAT fixed cost | Review before apply |
+| NAT Gateway | 1 workload NAT when ECS k6 is used | Can add ~$30–$70+ if left 24/7 | Hourly + data processing | Keep bounded to test window; do not add extra NATs |
+| **Total forecast** | With bounded workload NAT | **~$70–$135/month + NAT active time** | Mostly Fargate + ALB + Grafana + logs | Under $200 if guardrails enforced |
+| **Worst likely if NAT left 24/7** | One NAT 24/7 | **~$110–$200+** | NAT fixed cost | Cleanup/review after demo |
 
 ## 5. Cost per demo service / tenant
 
@@ -140,7 +140,7 @@ Production note: per-service cost giảm khi fixed cost như ALB, Grafana, base 
 | Self-managed Prometheus/InfluxDB | Higher ops/storage risk | Không phù hợp W11/W12 timeline |
 | AI Engine on ECS Fargate | Moderate fixed cost | Contract yêu cầu FastAPI/container; predictable runtime |
 | AI Engine on Lambda container | Potentially lower fixed cost | Chỉ cân nhắc nếu AI artifact light, startup/latency phù hợp |
-| NAT Gateway for private egress | High fixed cost | Tránh nếu VPC endpoints hoặc public AWS endpoint đủ an toàn |
+| NAT Gateway for private k6 egress | High fixed cost | Chỉ dùng 1 NAT ở workload VPC cho ECS k6; AI VPC dùng VPC endpoints |
 | Sampling 10s/1s | Increases AMP/API/Lambda volume | Không cần cho capacity trend; 60s khớp contract |
 
 ## 7. Cost guardrails
@@ -155,7 +155,7 @@ W11/W12 must-have:
 - Lambda reserved/max concurrency cho ingest/prediction.
 - SQS queue retention vừa đủ demo; DLQ có alarm.
 - CloudWatch app log retention 14–30 ngày; AI audit log retention 1 năm theo contract.
-- Không tạo NAT Gateway nếu chưa có quyết định Tech Lead + cost note.
+- Không tạo thêm NAT Gateway; workload NAT chỉ phục vụ ECS k6 trong test window và cần review cleanup sau demo.
 - Scale-to-zero/circuit breaker cho ECS AI Engine nếu cost vượt ngưỡng nguy hiểm theo Deployment Contract.
 
 Circuit breaker action:
@@ -199,7 +199,7 @@ Budget >= 100% cap
 | CloudWatch | ~$2–$10 | TBD | TBD | TBD |
 | Grafana | ~$9–$30 | TBD | TBD | TBD |
 | KMS/Secrets/SSM/S3 | ~$1–$6 | TBD | TBD | TBD |
-| NAT Gateway | $0 target | TBD | TBD | Must explain if >0 |
+| NAT Gateway | 1 workload NAT during k6 test window | TBD | TBD | Must explain active hours and cleanup decision |
 | **Total** | **~$70–$135** | **TBD** | **TBD** | **TBD** |
 
 ### 8.3 Cost per useful prediction - fill in W12
@@ -218,7 +218,7 @@ Budget >= 100% cap
 
 - [x] Region/account pricing final là gì? — `us-east-1` trên shared sandbox AWS account.
 - [ ] AI Engine có bắt buộc min 2 tasks 24/7 trong demo không, hay được scale down ngoài test window?
-- [ ] Có cần NAT Gateway để AI Engine đọc S3/CloudWatch/OTel không, hay VPC endpoint/public AWS endpoint đủ?
+- [x] Có cần NAT Gateway để AI Engine đọc S3/CloudWatch/OTel không? — AI VPC không dùng NAT; dùng VPC endpoints cho S3/ECR/CloudWatch Logs. Workload VPC có 1 NAT cho ECS k6 private outbound.
 - [ ] Managed Grafana pricing/user count thực tế trong account mentor là bao nhiêu?
 - [ ] AMP usage metrics trong account có expose đủ để đo samples ingested/query không?
 - [ ] W12 có cần mô phỏng 50,000 events/sec peak không, hay chỉ design-level volume SLA?

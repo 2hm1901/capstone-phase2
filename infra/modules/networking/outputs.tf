@@ -8,6 +8,16 @@ output "workload_private_subnet_ids" {
   value       = aws_subnet.workload_private[*].id
 }
 
+output "workload_public_subnet_ids" {
+  description = "Public subnet IDs for workload NAT Gateway."
+  value       = aws_subnet.workload_public[*].id
+}
+
+output "workload_nat_gateway_id" {
+  description = "NAT Gateway ID used by ECS k6 tasks in workload private subnets for outbound access."
+  value       = aws_nat_gateway.workload.id
+}
+
 output "ai_engine_vpc_id" {
   description = "ID of the AI Engine runtime VPC."
   value       = aws_vpc.ai_engine.id
@@ -19,7 +29,7 @@ output "ai_engine_private_subnet_ids" {
 }
 
 output "ai_engine_public_subnet_ids" {
-  description = "Public subnet IDs for the AI Engine application load balancer."
+  description = "Reserved public subnet IDs in the AI Engine VPC. Current AI Engine ALB is internal and does not use these."
   value       = aws_subnet.ai_engine_public[*].id
 }
 
@@ -38,12 +48,17 @@ output "ai_engine_task_security_group_id" {
   value       = aws_security_group.ai_engine_task.id
 }
 
+output "ai_engine_api_vpc_link_security_group_id" {
+  description = "Security group ID for API Gateway VPC Link to the internal AI Engine ALB."
+  value       = aws_security_group.ai_engine_api_vpc_link.id
+}
+
 output "ai_engine_s3_endpoint_id" {
   description = "Gateway VPC endpoint ID for AI Engine access to S3 baseline storage."
   value       = aws_vpc_endpoint.ai_engine_s3.id
 }
 
 output "ai_engine_internet_gateway_id" {
-  description = "Internet Gateway ID for the AI Engine VPC public ALB path."
+  description = "Internet Gateway ID reserved for future public ingress; current AI Engine ALB is internal."
   value       = aws_internet_gateway.ai_engine.id
 }
