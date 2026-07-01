@@ -11,6 +11,7 @@ import botocore
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
+sns_client = boto3.client("sns")
 dynamodb = boto3.resource("dynamodb")
 audit_table = dynamodb.Table(os.environ["AUDIT_TABLE_NAME"])
 secretsmanager = boto3.client("secretsmanager")
@@ -18,6 +19,9 @@ grafana_secret_arn = os.environ.get("GRAFANA_SECRET_ARN")
 grafana_workspace_endpoint = os.environ.get("GRAFANA_WORKSPACE_ENDPOINT")
 AMP_QUERY_ENDPOINT = os.environ["AMP_QUERY_ENDPOINT"]
 AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", 30))
+ALERT_TOPIC_ARN = os.environ.get("ALERT_TOPIC_ARN", "")
+ENABLE_EMAIL_ALERTS = os.environ.get("ENABLE_EMAIL_ALERTS", "true").lower() == "true"
+EMAIL_ALERT_MIN_SEVERITY = float(os.environ.get("EMAIL_ALERT_MIN_SEVERITY", "0.5"))
 
 # Threshold tĩnh cho từng metric type (bạn có thể điều chỉnh)
 STATIC_THRESHOLDS = {
@@ -82,6 +86,15 @@ def handler(event, context):
                 create_grafana_annotation(result, service_id, tenant_id, latest_metrics)
             except Exception as e:
                 log_event("grafana_annotation_error", {"error": str(e)})
+
+        if anomaly:
+            publish_email_alert(
+                result=result,
+                service_id=service_id,
+                tenant_id=tenant_id,
+                correlation_id=correlation_id,
+                latest_metrics=latest_metrics,
+            )
 
         log_event("fallback_completed", {
             "correlation_id": correlation_id,
@@ -275,6 +288,69 @@ def create_grafana_annotation(result, service_id, tenant_id, metrics):
     except Exception as e:
         log_event("grafana_annotation_failed", {"error": str(e)})
         raise
+
+
+def publish_email_alert(result, service_id, tenant_id, correlation_id, latest_metrics):
+    if not ENABLE_EMAIL_ALERTS or not ALERT_TOPIC_ARN:
+        log_event("email_alert_skipped", {
+            "correlation_id": correlation_id,
+            "reason": "email_alerts_disabled_or_topic_missing"
+        })
+        return None
+
+    severity = float(result.get("severity") or 0)
+    if severity < EMAIL_ALERT_MIN_SEVERITY:
+        log_event("email_alert_skipped", {
+            "correlation_id": correlation_id,
+            "reason": "severity_below_threshold",
+            "severity": severity,
+            "threshold": EMAIL_ALERT_MIN_SEVERITY
+        })
+        return None
+
+    recommendation = result.get("recommendation") or {}
+    grafana_url = normalize_grafana_url(grafana_workspace_endpoint) if grafana_workspace_endpoint else "not-configured"
+    subject = f"[CDO08][sandbox] FALLBACK {service_id} {recommendation.get('action_verb', 'INVESTIGATE')}"
+    message = "\n".join([
+        "CDO08 Foresight Lens fallback alert",
+        "",
+        "Alert type: fallback",
+        f"Tenant: {tenant_id}",
+        f"Service: {service_id}",
+        f"Anomaly: {result.get('anomaly')}",
+        f"Severity: {severity}",
+        f"Action: {recommendation.get('action_verb')}",
+        f"Target: {recommendation.get('target')}",
+        f"Confidence: {recommendation.get('confidence')}",
+        f"Reasoning: {result.get('reasoning')}",
+        f"Metrics: {json.dumps(latest_metrics, sort_keys=True)}",
+        f"Audit ID: {result.get('audit_id')}",
+        f"Correlation ID: {correlation_id}",
+        f"Grafana: {grafana_url}",
+    ])
+
+    try:
+        response = sns_client.publish(
+            TopicArn=ALERT_TOPIC_ARN,
+            Subject=subject[:100],
+            Message=message,
+        )
+        message_id = response.get("MessageId")
+        log_event("email_alert_published", {
+            "correlation_id": correlation_id,
+            "message_id": message_id,
+            "service_id": service_id,
+            "tenant_id": tenant_id,
+            "alert_type": "fallback",
+        })
+        return message_id
+    except Exception as error:
+        log_event("email_alert_failed", {
+            "correlation_id": correlation_id,
+            "error_type": type(error).__name__,
+            "error": str(error)
+        })
+        return None
 
 
 def parse_grafana_secret(secret_string):

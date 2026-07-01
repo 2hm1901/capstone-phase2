@@ -247,3 +247,21 @@ variable "reviewer_principal_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_email_alerts" {
+  description = "Enable SNS email alerts for Prediction/Fallback anomalies."
+  type        = bool
+  default     = true
+}
+
+variable "alert_email_subscribers" {
+  description = "Email subscribers for Prediction/Fallback SNS alerts. Each recipient must confirm the SNS subscription email."
+  type        = list(string)
+  default     = ["2hm1901dev@gmail.com"]
+}
+
+variable "email_alert_min_severity" {
+  description = "Minimum severity before Prediction/Fallback sends an email alert."
+  type        = number
+  default     = 0.5
+}

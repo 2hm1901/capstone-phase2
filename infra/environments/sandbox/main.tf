@@ -79,6 +79,9 @@ module "prediction" {
   audit_table_name             = module.observability_audit.audit_table_name
   grafana_api_token_secret_arn = module.security_baseline.grafana_secret_arn
   grafana_workspace_endpoint   = module.observability_audit.grafana_workspace_endpoint
+  email_alert_topic_arn        = module.security_baseline.email_alert_topic_arn
+  enable_email_alerts          = var.enable_email_alerts
+  email_alert_min_severity     = var.email_alert_min_severity
   audit_retention_days         = var.audit_retention_days
 
   prediction_role_arn        = module.security_baseline.prediction_role_arn
@@ -451,6 +454,8 @@ module "security_baseline" {
   name_prefix             = local.name_prefix
   tags                    = local.common_tags
   reviewer_principal_arns = var.reviewer_principal_arns
+  enable_email_alerts     = var.enable_email_alerts
+  alert_email_subscribers = var.alert_email_subscribers
 }
 
 # ==============================================================================
@@ -480,6 +485,16 @@ output "baseline_bucket_arn" {
 output "grafana_secret_arn" {
   description = "ARN of the Grafana token secret"
   value       = module.security_baseline.grafana_secret_arn
+}
+
+output "email_alert_topic_arn" {
+  description = "SNS topic ARN for Prediction/Fallback email alerts."
+  value       = module.security_baseline.email_alert_topic_arn
+}
+
+output "email_alert_subscribers" {
+  description = "Email subscribers configured for Prediction/Fallback SNS alerts."
+  value       = module.security_baseline.email_alert_subscribers
 }
 
 output "generator_role_arn" {

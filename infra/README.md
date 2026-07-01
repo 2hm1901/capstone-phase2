@@ -200,6 +200,23 @@ Provision AMP datasource và dashboard:
 python scripts/provision_grafana.py
 ```
 
+Email alert qua SNS:
+
+- Terraform tạo SNS topic `cdo08-sandbox-prediction-alerts`.
+- Email mặc định: `2hm1901dev@gmail.com`.
+- Sau `terraform apply`, người nhận phải mở email từ AWS SNS và bấm **Confirm subscription**. Nếu chưa confirm thì Lambda publish thành công nhưng email không được gửi tới inbox.
+- Prediction Lambda chỉ gửi email khi `anomaly=true`, severity >= `email_alert_min_severity`, và không bị cooldown duplicate service/action.
+- Fallback Lambda gửi email khi static fallback phát hiện anomaly.
+
+Kiểm tra subscription:
+
+```bash
+aws sns list-subscriptions-by-topic \
+  --region us-east-1 \
+  --topic-arn "$(terraform -chdir=infra/environments/sandbox output -raw email_alert_topic_arn)"
+```
+```
+
 NAT Gateway phát sinh hourly cost. Nếu không chạy k6 ECS dài hạn, review plan/destroy cleanup sau test window theo quyết định PM.
 
 ## Quy ước làm việc

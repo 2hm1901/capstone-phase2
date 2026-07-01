@@ -126,6 +126,24 @@ variable "grafana_workspace_endpoint" {
   default     = null
 }
 
+variable "email_alert_topic_arn" {
+  description = "SNS topic ARN for Prediction/Fallback email alerts. Null disables email publish at runtime."
+  type        = string
+  default     = null
+}
+
+variable "enable_email_alerts" {
+  description = "Whether Prediction/Fallback Lambdas should publish anomaly/fallback email alerts to SNS."
+  type        = bool
+  default     = true
+}
+
+variable "email_alert_min_severity" {
+  description = "Minimum severity required before sending email alert."
+  type        = number
+  default     = 0.5
+}
+
 # Lambda source inputs
 variable "prediction_source_dir" {
   description = "Source directory for Prediction Lambda code. Terraform packages this directory when enable_prediction=true."

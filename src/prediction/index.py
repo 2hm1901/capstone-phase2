@@ -13,6 +13,7 @@ from botocore.awsrequest import AWSRequest
 from boto3.dynamodb.conditions import Key
 
 lambda_client = boto3.client("lambda")
+sns_client = boto3.client("sns")
 dynamodb = boto3.resource("dynamodb")
 secretsmanager = boto3.client("secretsmanager")
 audit_table = dynamodb.Table(os.environ["AUDIT_TABLE_NAME"])
@@ -24,6 +25,9 @@ FRESHNESS_THRESHOLD_SECONDS = int(os.environ.get("FRESHNESS_THRESHOLD_SECONDS", 
 ANNOTATION_COOLDOWN_MINUTES = int(os.environ.get("ANNOTATION_COOLDOWN_MINUTES", 30))
 GRAFANA_SECRET_ARN = os.environ.get("GRAFANA_SECRET_ARN")
 GRAFANA_WORKSPACE_ENDPOINT = os.environ.get("GRAFANA_WORKSPACE_ENDPOINT")
+ALERT_TOPIC_ARN = os.environ.get("ALERT_TOPIC_ARN", "")
+ENABLE_EMAIL_ALERTS = os.environ.get("ENABLE_EMAIL_ALERTS", "true").lower() == "true"
+EMAIL_ALERT_MIN_SEVERITY = float(os.environ.get("EMAIL_ALERT_MIN_SEVERITY", "0.5"))
 # Danh sách các metric types cần query (theo telemetry contract)
 METRIC_TYPES = [
     "cpu_usage_percent",
@@ -122,7 +126,8 @@ def handler(event, context):
         if response.get("anomaly") is True:
             recommendation = response.get("recommendation") or {}
             action = recommendation.get("action_verb", "none")
-            if should_publish_annotation(tenant_id, service_id, action, end_time):
+            should_notify = should_publish_annotation(tenant_id, service_id, action, end_time)
+            if should_notify:
                 annotation_id = publish_prediction_annotation(
                     result=response,
                     service_id=service_id,
@@ -130,6 +135,15 @@ def handler(event, context):
                     correlation_id=correlation_id,
                     start_time=start_time,
                     end_time=end_time
+                )
+                publish_email_alert(
+                    result=response,
+                    service_id=service_id,
+                    tenant_id=tenant_id,
+                    correlation_id=correlation_id,
+                    alert_type="prediction",
+                    start_time=start_time,
+                    end_time=end_time,
                 )
             else:
                 log_event("grafana_annotation_suppressed", {
@@ -424,6 +438,76 @@ def publish_prediction_annotation(result, service_id, tenant_id, correlation_id,
             return annotation_id
     except Exception as error:
         log_event("grafana_annotation_failed", {
+            "correlation_id": correlation_id,
+            "error_type": type(error).__name__,
+            "error": str(error)
+        })
+        return None
+
+
+def publish_email_alert(result, service_id, tenant_id, correlation_id, alert_type, start_time=None, end_time=None):
+    if not ENABLE_EMAIL_ALERTS or not ALERT_TOPIC_ARN:
+        log_event("email_alert_skipped", {
+            "correlation_id": correlation_id,
+            "reason": "email_alerts_disabled_or_topic_missing"
+        })
+        return None
+
+    severity = float(result.get("severity") or 0)
+    if severity < EMAIL_ALERT_MIN_SEVERITY:
+        log_event("email_alert_skipped", {
+            "correlation_id": correlation_id,
+            "reason": "severity_below_threshold",
+            "severity": severity,
+            "threshold": EMAIL_ALERT_MIN_SEVERITY
+        })
+        return None
+
+    recommendation = result.get("recommendation") or {}
+    grafana_url = normalize_grafana_url(GRAFANA_WORKSPACE_ENDPOINT) if GRAFANA_WORKSPACE_ENDPOINT else "not-configured"
+    window_lines = []
+    if start_time and end_time:
+        window_lines = [
+            f"Window start: {start_time.isoformat().replace('+00:00', 'Z')}",
+            f"Window end: {end_time.isoformat().replace('+00:00', 'Z')}",
+        ]
+
+    subject = f"[CDO08][sandbox] {alert_type.upper()} {service_id} {recommendation.get('action_verb', 'INVESTIGATE')}"
+    message = "\n".join([
+        "CDO08 Foresight Lens alert",
+        "",
+        f"Alert type: {alert_type}",
+        f"Tenant: {tenant_id}",
+        f"Service: {service_id}",
+        f"Anomaly: {result.get('anomaly')}",
+        f"Severity: {severity}",
+        f"Action: {recommendation.get('action_verb')}",
+        f"Target: {recommendation.get('target')}",
+        f"Confidence: {recommendation.get('confidence')}",
+        f"Reasoning: {result.get('reasoning')}",
+        f"Audit ID: {result.get('audit_id')}",
+        f"Correlation ID: {correlation_id}",
+        *window_lines,
+        f"Grafana: {grafana_url}",
+    ])
+
+    try:
+        response = sns_client.publish(
+            TopicArn=ALERT_TOPIC_ARN,
+            Subject=subject[:100],
+            Message=message,
+        )
+        message_id = response.get("MessageId")
+        log_event("email_alert_published", {
+            "correlation_id": correlation_id,
+            "message_id": message_id,
+            "service_id": service_id,
+            "tenant_id": tenant_id,
+            "alert_type": alert_type,
+        })
+        return message_id
+    except Exception as error:
+        log_event("email_alert_failed", {
             "correlation_id": correlation_id,
             "error_type": type(error).__name__,
             "error": str(error)

@@ -65,6 +65,7 @@ Prediction Lambda dùng idempotency key `service_id + scheduled_at` để retry 
 |---|---|---|---|
 | AI Engine runtime config: endpoint, baseline bucket, AWS_REGION, OTel endpoint nếu dùng | SSM Parameter Store hoặc Terraform variable | Prediction Lambda và/hoặc AI Engine task | Không phải secret; auth dùng IAM SigV4, không dùng API key |
 | Grafana service-account token | AWS Secrets Manager `cdo08/grafana` | Prediction/Fallback Lambda | Tech Lead owner; rotate khi lộ token hoặc trước demo nếu cần |
+| SNS email subscriber | Terraform variable `alert_email_subscribers` | SNS subscription only | Không phải secret; người nhận phải confirm email từ AWS SNS trước khi nhận alert |
 | HMAC/API key ingest, nếu IAM auth không được dùng | AWS Secrets Manager `cdo08/telemetry-ingest` | Generator task | PM/Tech Lead owner; prefer IAM auth để tránh secret này |
 | AMP workspace ID, API URL, schedule interval | SSM Parameter Store hoặc Terraform variable | Relevant functions | Không phải secret; versioned config |
 

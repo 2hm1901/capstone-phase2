@@ -23,6 +23,15 @@ output "grafana_secret_arn" {
   value       = aws_secretsmanager_secret.grafana_token.arn
 }
 
+output "email_alert_topic_arn" {
+  description = "SNS topic ARN for prediction/fallback email alerts."
+  value       = try(aws_sns_topic.email_alerts[0].arn, null)
+}
+
+output "email_alert_subscribers" {
+  description = "Email addresses configured as SNS subscribers for prediction/fallback alerts."
+  value       = var.enable_email_alerts ? var.alert_email_subscribers : []
+}
 
 output "generator_role_arn" {
   description = "ARN of the Generator role"
