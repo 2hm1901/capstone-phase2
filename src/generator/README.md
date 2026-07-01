@@ -84,18 +84,17 @@ Run from `capstone-phase2`:
 aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin 894597652722.dkr.ecr.us-east-1.amazonaws.com
 
-docker build -t cdo08-sandbox-generator:k6-v1 ./src/generator
-
-docker tag cdo08-sandbox-generator:k6-v1 \
-  894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1
-
-docker push 894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1
+docker buildx build \
+  --platform linux/amd64 \
+  -t 894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-ai-baseline-20260702-1 \
+  --push \
+  ./src/generator
 ```
 
 Set `generator_image_uri` to the pushed tag before planning/applying:
 
 ```hcl
-generator_image_uri = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1"
+generator_image_uri = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-ai-baseline-20260702-1"
 ```
 
 ## Terraform checks
@@ -121,7 +120,7 @@ docker run --rm \
   -e AWS_SESSION_TOKEN \
   -e SCENARIO=noisy_baseline \
   -e RUN_DURATION_SECONDS=60 \
-  cdo08-sandbox-generator:k6-v1
+  cdo08-sandbox-generator:k6-ai-baseline-20260702-1
 ```
 
 ## Run ECS task
