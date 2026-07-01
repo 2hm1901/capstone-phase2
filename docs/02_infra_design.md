@@ -2,22 +2,24 @@
 
 **Document owner:** CDO08
 
-**Status:** Draft (W11)
+**Status:** Final draft for W12 Evidence Pack #2
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-01
 
 ## 1. Tổng quan kiến trúc
 
-> **Sơ đồ kiến trúc:** CDO08 sẽ tự bổ sung Mermaid hoặc ảnh kiến trúc sau khi chốt account, region và endpoint cuối cùng của AI Engine. Sơ đồ cần thể hiện luồng: synthetic generator → ingest → buffer → time-series storage → prediction adapter → **AI Engine Runtime do CDO08 host** → Grafana annotation/audit/fallback.
+> **Sơ đồ kiến trúc W12:** diagram dưới đây là topology cuối của CDO08: k6 ECS generator trong workload VPC, ingest API Gateway/Lambda/SQS/Writer, AMP, Prediction/Serving Adapter/Fallback Lambdas, AI API Gateway `AWS_IAM` qua VPC Link tới internal ALB trong AI VPC, AI Engine ECS Fargate private subnet, S3 baseline, Grafana annotation và DynamoDB audit.
 
-![alt text](image.png)
+![CDO08 Foresight Lens W12 architecture](image.png)
 
 CDO08 thiết kế platform theo nguyên tắc **operational trust**: telemetry phải được kiểm tra trước khi lưu; lỗi tạm thời không được làm mất event âm thầm; kết quả prediction phải truy vết được; và khi AI serving lỗi, alert vẫn hoạt động theo static threshold. Đây là cách giải trực tiếp vấn đề của Client: nội bộ không được phát hiện capacity exhaustion sau support ticket.
 
-Luồng dữ liệu dự kiến gồm sáu bước. 
+Luồng dữ liệu final gồm sáu bước. 
 Đầu tiên, một ECS Fargate task chạy synthetic generator/k6 để tạo metric cho ba service và bốn scenario test. Tiếp theo, API Gateway và Lambda ingest xác thực schema, `tenant_id`, `service_id`, `metric_type`, `ts` và value. Event hợp lệ vào SQS; event sai schema vào DLQ để điều tra. Writer Lambda lấy event theo batch từ SQS, chuyển JSON telemetry thành Prometheus remote-write payload rồi ghi vào Amazon Managed Service for Prometheus (AMP). EventBridge Scheduler chạy theo lịch, gửi payload `tenant_id`, `service_id` và metric lookback window tới Prediction Integration Lambda. Lambda query metric window tối thiểu 120 phút bằng PromQL theo service, chuyển dữ liệu thành `signal_window`, sau đó gọi `POST /v1/predict` tới **AI Engine Runtime do CDO08 host** qua AI API Gateway `AWS_IAM` bằng IAM SigV4. AI team bàn giao engine artifact/spec; CDO08 triển khai runtime theo Deployment Contract, kiểm soát network, IAM, secrets, scaling, health check, rollout/rollback và observability trong platform CDO08. Nếu thành công, Lambda tạo Grafana annotation và audit record; nếu AI trả 429/503, timeout hoặc hết retry budget, fallback evaluator query metric gần nhất từ AMP, dùng static threshold và tạo alert/annotation có nhãn `fallback`.
 
-> **Trạng thái quyết định AI Engine:** Deployment Contract đã freeze lại theo đúng ownership: **mỗi CDO tự host AI Engine trên platform của mình** dựa trên artifact/spec AI bàn giao. CDO08 dùng ECS Fargate FastAPI runtime theo các thông số compute/network trong contract.
+> **Trạng thái quyết định AI Engine:** Deployment Contract đã freeze lại theo đúng ownership: **mỗi CDO tự host AI Engine trên platform của mình** dựa trên artifact/spec AI bàn giao. CDO08 dùng ECS Fargate FastAPI runtime, internal ALB private path, API Gateway `AWS_IAM` SigV4 edge và baseline files trên S3.
+
+> **Dashboard note:** generator/writer hiện ingest đủ 7 metric theo contract, gồm `active_connections`. Grafana dashboard W12 đang có 6 panels chính; panel `active_connections` cần được thêm hoặc ghi rõ là visualization gap trong evidence pack.
 
 CDO08 không chọn một “angle công nghệ” chỉ để khác hai CDO còn lại. Nhóm có thể dùng managed service giống họ, nhưng cần chứng minh platform đáng tin hơn bằng test và artifact: validation/retry/DLQ, correlation ID xuyên suốt, audit mã hóa, fallback test thật, IaC tái lập và cost guard.
 

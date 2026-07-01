@@ -2,9 +2,9 @@
 
 **Document owner:** CDO08
 
-**Status:** Ongoing log W11-W12
+**Status:** Final draft for W12 Evidence Pack #2
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-01
 
 ADR là log các quyết định kiến trúc có trade-off thật. File này append-only: nếu quyết định cũ không còn đúng, đánh dấu `Superseded by ADR-xxx`, không xóa.
 
@@ -286,3 +286,79 @@ ADR là log các quyết định kiến trúc có trade-off thật. File này ap
   - 30s/10s sampling: có thể chi tiết hơn nhưng tăng ingest/storage/query volume; không cần cho capacity trend hiện tại.
   - Prediction mỗi 30s: rejected vì query gần như trùng window và tăng cost 10x so với 5 phút.
   - Prediction theo mỗi data point: rejected vì dễ quá tải AI Engine và audit/dashboard noise.
+
+---
+
+## ADR-016 - Đưa AI Engine sau API Gateway AWS_IAM + VPC Link + internal ALB
+
+- **Status:** Accepted
+- **Date:** 2026-07-01
+- **Context:** Deployment Contract yêu cầu AI Engine private/internal path và SigV4 auth. Ban đầu CDO08 từng dùng ALB public để demo nhanh, nhưng final W12 cần align contract và giảm public exposure.
+- **Decision:** Expose AI Engine qua API Gateway `AWS_IAM`. API Gateway dùng VPC Link tới internal ALB trong AI VPC; ECS AI Engine chạy private subnet, không public IP.
+- **Consequence:**
+  - ✅ Khớp contract private runtime và SigV4 edge.
+  - ✅ Serving Adapter không cần vào AI VPC; chỉ cần gọi public API Gateway bằng SigV4.
+  - ✅ ALB không public, ECS task chỉ nhận traffic từ ALB.
+  - ⚠️ Thêm API Gateway/VPC Link component cần monitor.
+  - ⚠️ Cần IAM permission `execute-api:Invoke` đúng route cho Serving Adapter.
+- **Alternatives considered:**
+  - Public ALB: dùng được cho demo nhanh nhưng không khớp final contract/security expectation.
+  - Lambda trong VPC gọi internal ALB trực tiếp: private hơn nhưng cần Lambda VPC networking, endpoints/NAT path và phức tạp hơn.
+  - VPC peering giữa workload/AI VPC: rejected vì hai VPC không cần nói chuyện trực tiếp.
+
+---
+
+## ADR-017 - Dùng một NAT Gateway cho workload VPC để ECS k6 chạy trong private subnet
+
+- **Status:** Accepted
+- **Date:** 2026-07-01
+- **Context:** Diagram yêu cầu k6 generator chạy trên AWS trong private subnet. k6 cần gọi ingest API Gateway public endpoint, pull image/ECR và ghi logs. Interface endpoint cho API Gateway public endpoint không giải quyết toàn bộ public egress pattern này.
+- **Decision:** Dùng 1 NAT Gateway ở workload VPC để ECS k6 private subnet có outbound Internet trong test window.
+- **Consequence:**
+  - ✅ k6 không có public inbound/public IP.
+  - ✅ Giữ đúng diagram ECS private subnet.
+  - ✅ Chạy được real 2h window trên AWS, không phụ thuộc laptop.
+  - ⚠️ NAT là fixed hourly cost lớn, cần cost guardrail và cleanup review sau demo.
+  - ⚠️ Không nên tạo thêm NAT per AZ trong capstone vì vượt cost cap dễ hơn.
+- **Alternatives considered:**
+  - Run k6 local: rẻ hơn nhưng không khớp diagram/evidence AWS.
+  - Assign public IP cho ECS k6: đơn giản hơn nhưng yếu hơn về private workload story.
+  - Chỉ dùng VPC endpoints: không đủ cho public API Gateway ingest path hiện tại và tăng endpoint complexity.
+
+---
+
+## ADR-018 - Provision Grafana datasource/dashboard bằng script, token lưu Secrets Manager
+
+- **Status:** Accepted
+- **Date:** 2026-07-01
+- **Context:** Terraform AWS provider không quản lý đầy đủ Grafana dashboard/datasource bằng native AWS resource. Grafana service account token không được hard-code trong Terraform state/source.
+- **Decision:** Terraform tạo/reference Grafana workspace và Secrets Manager secret. Script `scripts/provision_grafana.py` đọc token runtime, tạo AMP datasource và dashboard JSON.
+- **Consequence:**
+  - ✅ Dashboard reproducible hơn thao tác tay.
+  - ✅ Token không commit vào repo.
+  - ✅ Dễ update dashboard JSON theo source control.
+  - ⚠️ Cần tạo/rotate Grafana service account token thủ công hoặc qua Grafana API sau khi workspace ready.
+  - ⚠️ Reviewer cần chạy script sau apply nếu dashboard chưa tồn tại.
+- **Alternatives considered:**
+  - Tạo dashboard tay trên UI: nhanh nhưng không reproducible.
+  - Commit token trong `.tfvars`/env: rejected vì secret leakage.
+  - Self-managed Grafana provider: không cần thiết cho capstone scope.
+
+---
+
+## ADR-019 - Chặn annotation spam bằng freshness guard, cooldown và idempotent point annotations
+
+- **Status:** Accepted
+- **Date:** 2026-07-01
+- **Context:** Sau khi k6 dừng, EventBridge vẫn gọi Prediction Lambda mỗi 5 phút. Nếu Prediction Lambda tiếp tục dùng stale 120-minute window hoặc không dedupe theo service, Grafana bị spam annotation dù không còn data mới.
+- **Decision:** Prediction Lambda chỉ gọi AI khi có telemetry mới trong freshness window, tạo point annotation thay vì time range dài, và dùng DynamoDB `Query` để cooldown/dedupe theo service.
+- **Consequence:**
+  - ✅ Dashboard ít noise hơn và annotation có ý nghĩa thời điểm.
+  - ✅ Khi không có data mới, Lambda ghi skip reason thay vì gọi AI.
+  - ✅ Cooldown giảm duplicate annotation cùng một anomaly.
+  - ⚠️ Prediction role cần thêm `dynamodb:Query`.
+  - ⚠️ Nếu cooldown quá dài có thể bỏ qua anomaly kế tiếp; cần tuning sau capstone.
+- **Alternatives considered:**
+  - Tắt Scheduler khi k6 dừng: giảm spam nhưng không chứng minh 24/7 prediction behavior.
+  - Chỉ sửa Grafana filter: che triệu chứng, không giảm audit/API calls.
+  - Luôn gọi AI mỗi 5 phút: rejected vì gây annotation spam và cost/noise.

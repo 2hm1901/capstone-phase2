@@ -2,13 +2,13 @@
 
 **Document owner:** CDO08
 
-**Status:** Draft (W11)
+**Status:** Final draft for W12 Evidence Pack #2
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-01
 
 > **Phạm vi:** Tài liệu này mô tả các control bảo mật mà CDO08 thực sự cấu hình/deploy trong capstone: network boundary, IAM, secrets, encryption, audit và telemetry isolation. Đây không phải security audit enterprise hoàn chỉnh, không bao gồm threat model STRIDE, SIEM hay application authorization chi tiết.
 
-> **W11 target:** Chốt design và policy boundary để build IaC. **W12 target:** Bổ sung evidence thực tế như Terraform, IAM policy ARN, KMS config, audit sample, negative test và scan result.
+> **W12 evidence target:** document này phản ánh design đã deploy bằng Terraform. Screenshot/log cụ thể cần được attach trong [`W12_EVIDENCE_PACK.md`](W12_EVIDENCE_PACK.md).
 
 ## 1. Network security
 
@@ -47,7 +47,7 @@ CDO08 dùng một IAM role cho một nhiệm vụ. Không dùng shared administr
 | `cdo08-generator-role` | Fargate synthetic generator | `execute-api:Invoke` chỉ cho telemetry endpoint; CloudWatch Logs write |
 | `cdo08-ingest-role` | Telemetry Entry Lambda | `sqs:SendMessage` chỉ telemetry queue; CloudWatch Logs write |
 | `cdo08-writer-role` | Telemetry Writer Lambda | `sqs:ReceiveMessage/DeleteMessage/GetQueueAttributes`; AMP `RemoteWrite` chỉ workspace; CloudWatch Logs write |
-| `cdo08-prediction-role` | Prediction Integration Lambda | AMP query actions chỉ workspace; gọi **AI Engine Runtime nội bộ** bằng IAM SigV4 theo contract; `dynamodb:PutItem` chỉ audit table; đọc Grafana secret nếu cần; CloudWatch Logs write |
+| `cdo08-prediction-role` | Prediction Integration Lambda | AMP query actions chỉ workspace; gọi **AI Engine Runtime nội bộ** bằng IAM SigV4 theo contract; `dynamodb:PutItem` và `dynamodb:Query` cho audit/cooldown trên audit table; đọc Grafana secret nếu cần; CloudWatch Logs write |
 | `cdo08-ai-engine-role` | AI Engine ECS Fargate task | Chỉ đọc baseline S3/KMS theo contract, ghi CloudWatch Logs/metrics; không có quyền AMP write, audit delete hay administrator |
 | `cdo08-fallback-role` | Fallback Lambda | AMP query actions, write audit record, tạo Grafana annotation theo secret; không có quyền remote-write telemetry |
 | `cdo08-scheduler-role` | EventBridge Scheduler | Chỉ `lambda:InvokeFunction` cho Prediction Lambda |
@@ -132,17 +132,22 @@ AI Engine Runtime nằm trong phần CDO08 deploy. Khi AI bàn giao image/artifa
 
 SOC2/GDPR/PCI certification không nằm trong scope. PCI card data đặc biệt out of scope vì telemetry chỉ chứa infrastructure metrics.
 
-## 8. Open questions
+## 8. Resolved W12 security decisions
 
-- [x] AI Engine compute/runtime ownership? — *Deployment Contract 25/06/2026: mỗi CDO tự host ECS Fargate FastAPI model serving trên platform riêng; AI không host endpoint tập trung.*
-- [x] Engine auth/path/health? — *Deployment Contract: IAM SigV4, per-CDO internal endpoint, `/v1/predict`, `/health`, port 8080.*
-- [x] CDO08 VPC/subnet/security group/ALB path cho AI Engine chốt chưa? — *Chốt theo contract: AI API Gateway `AWS_IAM` edge, VPC Link tới internal ALB, ECS task private subnet, Serving Adapter Lambda ngoài VPC gọi API Gateway bằng SigV4, không VPC peering.*
-- [ ] AI image/artifact URI, immutable tag/digest và baseline S3 path cụ thể là gì? — *Resolve with AI owner before W12 integration test.*
-- [ ] AI Deployment Contract yêu cầu `OTel endpoint` per CDO platform. CDO08 có cần deploy ADOT/OpenTelemetry collector endpoint không, hay chỉ dùng CloudWatch/X-Ray đủ cho capstone? — *Resolve with AI owner before W12 integration test.*
-- [ ] API Gateway ingest dùng IAM auth hay API key/HMAC cho generator? — *Tech Lead resolve before Terraform apply.*
-- [ ] AMP cần customer-managed KMS key hay encryption mặc định đủ cho capstone? — *Resolve with mentor/Client security expectation before W12.*
-- [ ] Retention cụ thể cho audit record ngoài telemetry 90 ngày là bao lâu? — *Resolve with Client/mentor; current proposal is DynamoDB TTL 90 days.*
-- [ ] Lambda on-failure destination có cần riêng không hay CloudWatch alarm đủ cho W12 demo? — *Resolve in Deployment Design before integration test.*
+| Topic | Decision |
+|---|---|
+| AI Engine compute/runtime ownership | CDO08 hosts AI Engine on ECS Fargate from AI-provided artifact/spec |
+| Engine auth/path/health | AI API Gateway `AWS_IAM`, `/health`, `/v1/predict`, VPC Link to internal ALB, ECS private subnets |
+| AI image/artifact | Image is stored in ECR `foresight-lens-engine` with immutable tag, currently configured from Terraform instead of mutable `latest` |
+| Baseline storage | S3 bucket `cdo08-sandbox-ai-baselines-894597652722`, prefix `baselines/`, encrypted and private |
+| OTel endpoint | Not deployed for W12; CloudWatch Logs/Metrics are the capstone operational evidence path |
+| Ingest auth | API Gateway `AWS_IAM`; k6 generator signs requests with SigV4 via ECS task role |
+| AMP encryption | AMP managed encryption is accepted for capstone; KMS CMK is used for DynamoDB audit/S3 baseline/log groups where configured |
+| CDO audit retention | DynamoDB audit TTL uses `audit_retention_days`; current Terraform variable is 90 days for prediction/fallback evidence |
+| AI audit retention | AI Engine audit CloudWatch log group retention is 365 days per AI contract |
+| Failure notification | CloudWatch alarms are used for W12; no separate Lambda on-failure destination is required for demo |
+
+Remaining evidence to capture: IAM denied tests, API Gateway unauthorized test, KMS/DynamoDB/S3 screenshots, and proof that logs do not contain Grafana token or SigV4 Authorization values.
 
 ## Related documents
 
