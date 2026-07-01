@@ -123,23 +123,30 @@ def query_instant_metric(metric_type, tenant_id, service_id, at_time):
     """Query giá trị metric tại một thời điểm cụ thể từ AMP"""
     at_unix = int(at_time.timestamp())
     promql_query = f'{metric_type}{{tenant_id="{tenant_id}", service_id="{service_id}"}}'
-    query_params = urllib.parse.urlencode({
+
+    # AMP SigV4 is strict about canonical query encoding. Use POST form data
+    # for the same signing path used by awscurl and the prediction lambda.
+    form_body = urllib.parse.urlencode({
         "query": promql_query,
         "time": str(at_unix)
-    })
+    }).encode("utf-8")
 
-    url = f"{amp_api_base_url()}/api/v1/query?{query_params}"
+    url = f"{amp_api_base_url()}/api/v1/query"
+    request_headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
 
     # Sign request với SigV4 dùng botocore
     headers = sign_request_with_botocore(
-        method="GET",
+        method="POST",
         url=url,
-        body=b"",
+        body=form_body,
+        headers=request_headers,
         region=os.environ.get("AWS_REGION", "us-east-1"),
         service="aps"
     )
 
-    request = urllib.request.Request(url, headers=headers, method="GET")
+    request = urllib.request.Request(url, data=form_body, headers=headers, method="POST")
 
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
@@ -162,12 +169,12 @@ def query_instant_metric(metric_type, tenant_id, service_id, at_time):
 
 
 # Hàm sign mới dùng botocore:
-def sign_request_with_botocore(method, url, body, region, service):
+def sign_request_with_botocore(method, url, body, region, service, headers=None):
     session = boto3.Session()
     credentials = session.get_credentials()
     creds = credentials.get_frozen_credentials()
 
-    request = AWSRequest(method=method, url=url, data=body)
+    request = AWSRequest(method=method, url=url, data=body, headers=headers or {})
     SigV4Auth(creds, service, region).add_auth(request)
 
     return dict(request.headers)

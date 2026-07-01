@@ -132,26 +132,31 @@ def query_metric_from_amp(metric_type, tenant_id, service_id, start_time, end_ti
     # PromQL query: lấy tất cả giá trị của metric với tenant_id và service_id tương ứng
     promql_query = f'{metric_type}{{tenant_id="{tenant_id}", service_id="{service_id}"}}'
 
-    # Tạo query parameters cho AMP API
-    query_params = urllib.parse.urlencode({
+    # AMP query endpoints are sensitive to SigV4 canonical query encoding.
+    # Use POST form body, matching the successful awscurl path.
+    form_body = urllib.parse.urlencode({
         "query": promql_query,
         "start": str(start_unix),
         "end": str(end_unix),
         "step": "60s"  # Lấy mẫu mỗi 60 giây
-    })
+    }).encode("utf-8")
 
-    url = f"{amp_api_base_url()}/api/v1/query_range?{query_params}"
+    url = f"{amp_api_base_url()}/api/v1/query_range"
+    request_headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
 
     # Sign request với SigV4 dùng botocore
     headers = sign_request_with_botocore(
-        method="GET",
+        method="POST",
         url=url,
-        body=b"",
+        body=form_body,
+        headers=request_headers,
         region=os.environ.get("AWS_REGION", "us-east-1"),
         service="aps"
     )
 
-    request = urllib.request.Request(url, headers=headers, method="GET")
+    request = urllib.request.Request(url, data=form_body, headers=headers, method="POST")
 
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
@@ -201,13 +206,12 @@ def query_metric_from_amp(metric_type, tenant_id, service_id, start_time, end_ti
         return []
 
 
-# Hàm sign mới dùng botocore:
-def sign_request_with_botocore(method, url, body, region, service):
+def sign_request_with_botocore(method, url, body, region, service, headers=None):
     session = boto3.Session()
     credentials = session.get_credentials()
     creds = credentials.get_frozen_credentials()
 
-    request = AWSRequest(method=method, url=url, data=body)
+    request = AWSRequest(method=method, url=url, data=body, headers=headers or {})
     SigV4Auth(creds, service, region).add_auth(request)
 
     return dict(request.headers)
