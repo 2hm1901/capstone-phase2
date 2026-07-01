@@ -10,6 +10,7 @@ import boto3
 import botocore
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
+from boto3.dynamodb.conditions import Key
 
 lambda_client = boto3.client("lambda")
 dynamodb = boto3.resource("dynamodb")
@@ -19,6 +20,8 @@ AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", 30))
 SERVING_ADAPTER_LAMBDA_NAME = os.environ["SERVING_ADAPTER_LAMBDA_NAME"]
 AMP_QUERY_ENDPOINT = os.environ["AMP_QUERY_ENDPOINT"]
 LOOKBACK_MINUTES = int(os.environ.get("LOOKBACK_MINUTES", 120))
+FRESHNESS_THRESHOLD_SECONDS = int(os.environ.get("FRESHNESS_THRESHOLD_SECONDS", 180))
+ANNOTATION_COOLDOWN_MINUTES = int(os.environ.get("ANNOTATION_COOLDOWN_MINUTES", 30))
 GRAFANA_SECRET_ARN = os.environ.get("GRAFANA_SECRET_ARN")
 GRAFANA_WORKSPACE_ENDPOINT = os.environ.get("GRAFANA_WORKSPACE_ENDPOINT")
 # Danh sách các metric types cần query (theo telemetry contract)
@@ -52,6 +55,50 @@ def handler(event, context):
         # Tính toán time range
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(minutes=LOOKBACK_MINUTES)
+        latest_signal_time = latest_signal_timestamp(signal_window)
+
+        if latest_signal_time is None:
+            response = {
+                "anomaly": False,
+                "severity": 0.0,
+                "recommendation": None,
+                "reasoning": "Prediction skipped because no telemetry datapoints were found in the lookback window.",
+                "skipped": True,
+                "skip_reason": "no_recent_telemetry",
+            }
+            write_audit(correlation_id, service_id, tenant_id, response, scheduled_at, False)
+            log_event("prediction_skipped", {
+                "correlation_id": correlation_id,
+                "service_id": service_id,
+                "tenant_id": tenant_id,
+                "reason": "no_recent_telemetry"
+            })
+            return response
+
+        signal_age_seconds = (end_time - latest_signal_time).total_seconds()
+        if signal_age_seconds > FRESHNESS_THRESHOLD_SECONDS:
+            response = {
+                "anomaly": False,
+                "severity": 0.0,
+                "recommendation": None,
+                "reasoning": (
+                    "Prediction skipped because the latest telemetry datapoint is stale. "
+                    f"latest_ts={latest_signal_time.isoformat().replace('+00:00', 'Z')}, "
+                    f"age_seconds={int(signal_age_seconds)}"
+                ),
+                "skipped": True,
+                "skip_reason": "stale_telemetry",
+            }
+            write_audit(correlation_id, service_id, tenant_id, response, scheduled_at, False)
+            log_event("prediction_skipped", {
+                "correlation_id": correlation_id,
+                "service_id": service_id,
+                "tenant_id": tenant_id,
+                "reason": "stale_telemetry",
+                "latest_ts": latest_signal_time.isoformat().replace("+00:00", "Z"),
+                "age_seconds": int(signal_age_seconds)
+            })
+            return response
 
         # Bước 2: Gọi Serving Adapter
         response = invoke_serving_adapter({
@@ -73,14 +120,25 @@ def handler(event, context):
 
         annotation_id = None
         if response.get("anomaly") is True:
-            annotation_id = publish_prediction_annotation(
-                result=response,
-                service_id=service_id,
-                tenant_id=tenant_id,
-                correlation_id=correlation_id,
-                start_time=start_time,
-                end_time=end_time
-            )
+            recommendation = response.get("recommendation") or {}
+            action = recommendation.get("action_verb", "none")
+            if should_publish_annotation(tenant_id, service_id, action, end_time):
+                annotation_id = publish_prediction_annotation(
+                    result=response,
+                    service_id=service_id,
+                    tenant_id=tenant_id,
+                    correlation_id=correlation_id,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+            else:
+                log_event("grafana_annotation_suppressed", {
+                    "correlation_id": correlation_id,
+                    "service_id": service_id,
+                    "tenant_id": tenant_id,
+                    "action": action,
+                    "cooldown_minutes": ANNOTATION_COOLDOWN_MINUTES
+                })
 
         # Bước 3: Ghi audit
         write_audit(correlation_id, service_id, tenant_id, response, scheduled_at, False, annotation_id)
@@ -209,6 +267,30 @@ def query_metric_from_amp(metric_type, tenant_id, service_id, start_time, end_ti
         return []
 
 
+def latest_signal_timestamp(signal_window):
+    latest = None
+    for point in signal_window:
+        ts_value = point.get("ts")
+        if not ts_value:
+            continue
+        try:
+            ts = parse_rfc3339_utc(ts_value)
+        except ValueError:
+            continue
+        if latest is None or ts > latest:
+            latest = ts
+    return latest
+
+
+def parse_rfc3339_utc(value):
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def sign_request_with_botocore(method, url, body, region, service, headers=None):
     session = boto3.Session()
     credentials = session.get_credentials()
@@ -229,6 +311,60 @@ def invoke_serving_adapter(payload):
     return json.loads(response["Payload"].read())
 
 
+def should_publish_annotation(tenant_id, service_id, action, now):
+    """Suppress duplicate Grafana annotations for the same service/action cooldown window."""
+    cooldown_start = now - timedelta(minutes=ANNOTATION_COOLDOWN_MINUTES)
+    tenant_service = f"{tenant_id}#{service_id}"
+
+    try:
+        query_kwargs = {
+            "KeyConditionExpression": Key("tenant_service").eq(tenant_service),
+            "ProjectionExpression": "#ts, #result, grafana_annotation_id",
+            "ExpressionAttributeNames": {
+                "#ts": "timestamp",
+                "#result": "result",
+            },
+        }
+
+        while True:
+            response = audit_table.query(**query_kwargs)
+            for item in response.get("Items", []):
+                if not item.get("grafana_annotation_id"):
+                    continue
+
+                item_timestamp = item.get("timestamp")
+                if not item_timestamp:
+                    continue
+
+                try:
+                    created_at = parse_rfc3339_utc(item_timestamp)
+                except ValueError:
+                    continue
+
+                if created_at < cooldown_start:
+                    continue
+
+                result = item.get("result") or {}
+                recommendation = result.get("recommendation") or {}
+                if result.get("anomaly") is True and recommendation.get("action_verb", "none") == action:
+                    return False
+
+            if "LastEvaluatedKey" not in response:
+                break
+            query_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+
+    except Exception as error:
+        log_event("annotation_cooldown_check_failed", {
+            "service_id": service_id,
+            "tenant_id": tenant_id,
+            "action": action,
+            "error_type": type(error).__name__,
+            "error": str(error)
+        })
+
+    return True
+
+
 def publish_prediction_annotation(result, service_id, tenant_id, correlation_id, start_time, end_time):
     if not GRAFANA_SECRET_ARN or not GRAFANA_WORKSPACE_ENDPOINT:
         log_event("grafana_annotation_skipped", {
@@ -242,8 +378,7 @@ def publish_prediction_annotation(result, service_id, tenant_id, correlation_id,
         recommendation = result.get("recommendation") or {}
         severity = result.get("severity")
         annotation_payload = {
-            "time": int(start_time.timestamp() * 1000),
-            "timeEnd": int(end_time.timestamp() * 1000),
+            "time": int(end_time.timestamp() * 1000),
             "tags": [
                 "prediction",
                 f"tenant:{tenant_id}",
@@ -260,6 +395,8 @@ def publish_prediction_annotation(result, service_id, tenant_id, correlation_id,
                 f"Target: {recommendation.get('target')}",
                 f"Confidence: {recommendation.get('confidence')}",
                 f"Reasoning: {result.get('reasoning')}",
+                f"Window Start: {start_time.isoformat().replace('+00:00', 'Z')}",
+                f"Window End: {end_time.isoformat().replace('+00:00', 'Z')}",
                 f"Audit ID: {result.get('audit_id')}",
                 f"Correlation ID: {correlation_id}",
             ]),
