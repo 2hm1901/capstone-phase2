@@ -17,6 +17,7 @@ DEFAULT_ALLOWED_EXTRA_LABELS = {
     "cache_type",
     "environment",
     "instance_id",
+    "scenario",
 }
 DEFAULT_BLOCKED_LABELS = {
     "correlation_id",

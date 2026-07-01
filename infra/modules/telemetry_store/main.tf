@@ -6,7 +6,7 @@ locals {
   amp_remote_write_endpoint = "https://aps-workspaces.${data.aws_region.current.name}.amazonaws.com/workspaces/${aws_prometheus_workspace.this.id}/api/v1/remote_write"
   amp_query_endpoint        = "https://aps-workspaces.${data.aws_region.current.name}.amazonaws.com/workspaces/${aws_prometheus_workspace.this.id}/api/v1/query"
 
-  writer_allowed_labels = "region,db_type,queue_name,cache_type,environment,instance_id"
+  writer_allowed_labels = "region,db_type,queue_name,cache_type,environment,instance_id,scenario"
   writer_blocked_labels = "correlation_id,request_id,event_id,trace_id,session_id,user_id"
 }
 
