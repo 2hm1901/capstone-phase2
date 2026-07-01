@@ -15,8 +15,13 @@ const runDurationSeconds = parsePositiveInt(
   __ENV.RUN_DURATION_SECONDS,
   Number(DEFAULT_RUN_DURATION_SECONDS),
 );
+const backfillMode = parseBoolean(__ENV.BACKFILL_MODE, false);
+const backfillMinutes = parsePositiveInt(__ENV.BACKFILL_MINUTES, 120);
+const backfillStepSeconds = parsePositiveInt(__ENV.BACKFILL_STEP_SECONDS, emitIntervalSeconds);
 const services = parseCsv(__ENV.SERVICE_LIST || DEFAULT_SERVICES);
 const scenarios = selectScenarios(__ENV.SCENARIO, __ENV.SCENARIO_LIST || DEFAULT_SCENARIO_LIST);
+
+let backfillCompleted = false;
 
 export const options = {
   scenarios: {
@@ -84,6 +89,9 @@ export function setup() {
     scenarios,
     emit_interval_seconds: emitIntervalSeconds,
     run_duration_seconds: runDurationSeconds,
+    backfill_mode: backfillMode,
+    backfill_minutes: backfillMode ? backfillMinutes : undefined,
+    backfill_step_seconds: backfillMode ? backfillStepSeconds : undefined,
     auth: "iam_sigv4",
   });
 
@@ -94,6 +102,15 @@ export function setup() {
 }
 
 export default function (data) {
+  if (backfillMode) {
+    if (!backfillCompleted) {
+      emitBackfill(data.credentials);
+      backfillCompleted = true;
+    }
+    sleep(1);
+    return;
+  }
+
   const elapsedMinutes = (Date.now() - data.startedAt) / 60000.0;
   const scenario = scenarios[Math.floor(elapsedMinutes / Math.max(emitIntervalSeconds / 60.0, 1 / 60)) % scenarios.length];
 
@@ -127,6 +144,72 @@ export default function (data) {
   }
 
   sleep(emitIntervalSeconds);
+}
+
+function emitBackfill(credentials) {
+  const endTime = new Date();
+  const stepMs = backfillStepSeconds * 1000;
+  const startTime = new Date(endTime.getTime() - backfillMinutes * 60 * 1000 + stepMs);
+  let emitted = 0;
+  let failed = 0;
+
+  log("backfill_started", {
+    start_ts: startTime.toISOString(),
+    end_ts: endTime.toISOString(),
+    services,
+    scenarios,
+    backfill_minutes: backfillMinutes,
+    backfill_step_seconds: backfillStepSeconds,
+  });
+
+  for (let ts = startTime.getTime(); ts <= endTime.getTime(); ts += stepMs) {
+    const pointTime = new Date(ts);
+    const elapsedMinutes = Math.max(0, (ts - startTime.getTime()) / 60000.0);
+    const scenario = scenarios[Math.floor(elapsedMinutes / Math.max(backfillStepSeconds / 60.0, 1 / 60)) % scenarios.length];
+
+    for (const serviceId of services) {
+      const correlationId = uuidv4();
+
+      for (const metricType of metricTypes) {
+        const payload = {
+          ts: pointTime.toISOString(),
+          tenant_id: tenantId,
+          service_id: serviceId,
+          metric_type: metricType,
+          value: calculateMetricValue(scenario, serviceId, metricType, elapsedMinutes),
+          labels: metricLabels(serviceId, metricType, scenario),
+          schema_version: "v1.0",
+          correlation_id: correlationId,
+        };
+
+        const response = postSignedJson(ingestEndpoint, payload, credentials);
+        emitted += response.status >= 200 && response.status < 300 ? 1 : 0;
+        failed += response.status >= 200 && response.status < 300 ? 0 : 1;
+
+        if (failed > 0 || emitted % 250 === 0) {
+          log("backfill_emit_progress", {
+            status: response.status,
+            emitted,
+            failed,
+            service_id: serviceId,
+            metric_type: metricType,
+            scenario,
+            point_ts: payload.ts,
+            response_body: response.status >= 200 && response.status < 300 ? undefined : response.body,
+          });
+        }
+      }
+    }
+  }
+
+  log("backfill_completed", {
+    emitted,
+    failed,
+    services,
+    scenarios,
+    backfill_minutes: backfillMinutes,
+    backfill_step_seconds: backfillStepSeconds,
+  });
 }
 
 function postSignedJson(url, payload, credentials) {
@@ -305,6 +388,13 @@ function parseCsv(value) {
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value || "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseBoolean(value, fallback) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  return ["1", "true", "yes", "y"].includes(String(value).trim().toLowerCase());
 }
 
 function parseUrl(value) {

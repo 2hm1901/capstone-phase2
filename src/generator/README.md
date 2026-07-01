@@ -47,6 +47,9 @@ Supported scenarios:
 | `SCENARIO_LIST` | all four scenarios | Backward-compatible Terraform env |
 | `EMIT_INTERVAL_SECONDS` | `60` | Sleep between k6 iterations |
 | `RUN_DURATION_SECONDS` | `600` | Bounded run duration; use `7200` for a 2-hour evidence window |
+| `BACKFILL_MODE` | `false` | When `true`, emit historical timestamps instead of waiting in real time |
+| `BACKFILL_MINUTES` | `120` | Number of past minutes to emit when `BACKFILL_MODE=true` |
+| `BACKFILL_STEP_SECONDS` | `EMIT_INTERVAL_SECONDS` | Timestamp spacing for backfill points |
 | `AWS_REGION` | `us-east-1` | SigV4 signing region |
 
 ## IAM/SigV4 auth
@@ -125,6 +128,34 @@ aws ecs run-task \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[<private_subnet_id>],securityGroups=[<generator_sg_id>],assignPublicIp=DISABLED}" \
   --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"SCENARIO","value":"gradual_drift"},{"name":"SERVICE_LIST","value":"payment-gw"},{"name":"RUN_DURATION_SECONDS","value":"7200"}]}]}'
+```
+
+## Backfill the last 120 minutes
+
+Use this when prediction needs a fresh 120-minute AMP window but waiting two real hours is not practical. The task sends historical `ts` values for the last 120 minutes, then exits after the bounded k6 duration.
+
+```bash
+aws ecs run-task \
+  --region us-east-1 \
+  --cluster "$(terraform -chdir=infra/environments/sandbox output -raw generator_cluster_name)" \
+  --task-definition cdo08-sandbox-generator \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$(terraform -chdir=infra/environments/sandbox output -json workload_private_subnet_ids | jq -r 'join(",")')],securityGroups=[$(terraform -chdir=infra/environments/sandbox output -raw generator_security_group_id)],assignPublicIp=DISABLED}" \
+  --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"BACKFILL_MODE","value":"true"},{"name":"BACKFILL_MINUTES","value":"120"},{"name":"BACKFILL_STEP_SECONDS","value":"60"},{"name":"SCENARIO","value":"noisy_baseline"},{"name":"RUN_DURATION_SECONDS","value":"120"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
+```
+
+After it completes, verify AMP:
+
+```bash
+AMP_QUERY_ENDPOINT="$(terraform -chdir=infra/environments/sandbox output -raw amp_query_endpoint)"
+
+.venv/bin/awscurl \
+  --service aps \
+  --region us-east-1 \
+  -X POST \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'query=sum by (service_id) (count_over_time(cpu_usage_percent[120m]))' \
+  "$AMP_QUERY_ENDPOINT"
 ```
 
 ## Evidence checklist
