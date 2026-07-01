@@ -60,6 +60,9 @@ def handler(event, context):
             "tenant_id": tenant_id,
             "correlation_id": correlation_id,
             "context": {
+                "tenant_id": tenant_id,
+                "service_id": service_id,
+                "source": "cdo08-prediction-scheduler",
                 "deployment_version": "v1.0",
                 "time_range": {
                     "start_ts": start_time.isoformat().replace("+00:00", "Z"),

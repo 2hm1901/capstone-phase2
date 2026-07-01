@@ -80,6 +80,12 @@ def call_ai_engine(signal_window, context_data, tenant_id, correlation_id):
         with urllib.request.urlopen(request, timeout=10) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        log_event("ai_engine_http_error", {
+            "correlation_id": correlation_id,
+            "status_code": e.code,
+            "body": error_body[:1000]
+        })
         if e.code in [429, 503]:
             raise Exception(f"AI Engine returned {e.code}")
         if e.code in [400, 401, 403, 422]:
