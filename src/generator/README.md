@@ -43,11 +43,11 @@ Scenario meaning:
 | Scenario | Purpose | Expected use |
 |---|---|---|
 | `noisy_baseline` | Normal traffic around baseline with small noise | Run first to prove no false-positive spam |
-| `gradual_drift` | Slow capacity drift from baseline | Best scenario for lead-time evidence |
-| `slow_leak` | Memory-only leak pattern | Use to test memory/OOM recommendation |
-| `sudden_spike` | Short 5-minute spike every 30 minutes | Use for incident detection, not for 15-minute lead-time evidence |
+| `gradual_drift` | Baseline warm-up, then slow capacity drift | Best scenario for lead-time evidence |
+| `slow_leak` | Baseline warm-up, then memory-only leak pattern | Use to test memory/OOM recommendation |
+| `sudden_spike` | Baseline warm-up, then short 5-minute spike every 30 minutes | Use for incident detection, not for 15-minute lead-time evidence |
 
-Recommended clean evaluation sequence: run `noisy_baseline` for 2 hours, then run exactly one anomaly scenario for 2-3 hours. Avoid overlapping scenarios when collecting AI evidence because Prediction Lambda uses a 120-minute AMP lookback window.
+Recommended clean evaluation sequence: run exactly one anomaly scenario for 4-5 hours with the default `ANOMALY_START_SECONDS=7200`. The first 2 hours emit baseline-aligned telemetry, then the selected anomaly starts in the same ECS task and same Grafana line. Avoid overlapping scenarios when collecting AI evidence because Prediction Lambda uses a 120-minute AMP lookback window.
 
 ## Runtime config
 
@@ -60,6 +60,7 @@ Recommended clean evaluation sequence: run `noisy_baseline` for 2 hours, then ru
 | `SCENARIO_LIST` | all four scenarios | Backward-compatible Terraform env |
 | `EMIT_INTERVAL_SECONDS` | `60` | Sleep between k6 iterations |
 | `RUN_DURATION_SECONDS` | `600` | Bounded run duration; use `7200` for a 2-hour evidence window |
+| `ANOMALY_START_SECONDS` | `7200` | For anomaly scenarios, emit noisy baseline before this second, then start drift/spike/leak |
 | `BACKFILL_MODE` | `false` | When `true`, emit historical timestamps instead of waiting in real time |
 | `BACKFILL_MINUTES` | `120` | Number of past minutes to emit when `BACKFILL_MODE=true` |
 | `BACKFILL_STEP_SECONDS` | `EMIT_INTERVAL_SECONDS` | Timestamp spacing for backfill points |

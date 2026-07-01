@@ -15,6 +15,7 @@ const runDurationSeconds = parsePositiveInt(
   __ENV.RUN_DURATION_SECONDS,
   Number(DEFAULT_RUN_DURATION_SECONDS),
 );
+const anomalyStartSeconds = parseNonNegativeInt(__ENV.ANOMALY_START_SECONDS, 7200);
 const backfillMode = parseBoolean(__ENV.BACKFILL_MODE, false);
 const backfillMinutes = parsePositiveInt(__ENV.BACKFILL_MINUTES, 120);
 const backfillStepSeconds = parsePositiveInt(__ENV.BACKFILL_STEP_SECONDS, emitIntervalSeconds);
@@ -95,6 +96,7 @@ export function setup() {
     scenarios,
     emit_interval_seconds: emitIntervalSeconds,
     run_duration_seconds: runDurationSeconds,
+    anomaly_start_seconds: anomalyStartSeconds,
     backfill_mode: backfillMode,
     backfill_minutes: backfillMode ? backfillMinutes : undefined,
     backfill_step_seconds: backfillMode ? backfillStepSeconds : undefined,
@@ -325,13 +327,19 @@ function loadAwsCredentials() {
 function calculateMetricValue(scenario, serviceId, metricType, elapsedMinutes) {
   const base = (baselines[serviceId] || baselines["payment-gw"])[metricType];
   let value = base * (1.0 + randomBetween(-0.05, 0.05));
+  const anomalyElapsedMinutes = elapsedMinutes - anomalyStartSeconds / 60.0;
+  const isAnomalyPhase = anomalyElapsedMinutes >= 0.0;
+
+  if (!isAnomalyPhase && scenario !== "noisy_baseline") {
+    return Number(value.toFixed(2));
+  }
 
   if (scenario === "gradual_drift") {
     value = metricType === "cache_hit_rate_pct"
-      ? base * (1.0 - 0.0008 * elapsedMinutes)
-      : base * (1.0 + 0.0025 * elapsedMinutes);
+      ? base * (1.0 - 0.0008 * anomalyElapsedMinutes)
+      : base * (1.0 + 0.0025 * anomalyElapsedMinutes);
   } else if (scenario === "sudden_spike") {
-    const cycleMinute = elapsedMinutes % 30.0;
+    const cycleMinute = anomalyElapsedMinutes % 30.0;
     if (cycleMinute >= 15.0 && cycleMinute < 20.0) {
       if (metricType === "cache_hit_rate_pct") {
         value = base * 0.35;
@@ -342,7 +350,7 @@ function calculateMetricValue(scenario, serviceId, metricType, elapsedMinutes) {
       }
     }
   } else if (scenario === "slow_leak" && metricType === "memory_usage_percent") {
-    value = base + 0.12 * elapsedMinutes;
+    value = base + 0.12 * anomalyElapsedMinutes;
   }
 
   if (percentageMetricTypes.includes(metricType)) {
@@ -398,6 +406,11 @@ function parseCsv(value) {
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value || "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseNonNegativeInt(value, fallback) {
+  const parsed = Number.parseInt(value || "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function parseBoolean(value, fallback) {
