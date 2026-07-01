@@ -216,7 +216,7 @@ Smoke test tối thiểu:
 {
   "ts": "2026-06-25T10:30:00Z",
   "tenant_id": "tenant-cdo08-demo",
-  "service_id": "payment-api",
+  "service_id": "payment-gw",
   "metric_type": "api_latency_ms",
   "value": 450.5,
   "labels": {"region": "us-east-1"}
@@ -352,7 +352,7 @@ Cost cap mục tiêu là dưới $200/tháng. Deployment phải có guardrail:
 - Generator không chạy 24/7 nếu không cần; chạy theo test window.
 - Telemetry sampling mặc định 60s; không giảm xuống 10s/1s nếu không có test window time-bound.
 - Prediction interval mặc định 5 phút; không gọi AI theo từng data point.
-- Tránh NAT Gateway nếu không bắt buộc; ưu tiên VPC endpoints hoặc public AWS service endpoint khi security/cost cho phép.
+- Chỉ duy trì NAT Gateway ở workload VPC cho ECS k6 private outbound trong test window; AI VPC dùng VPC endpoints. Không thêm NAT Gateway mới nếu chưa review cost.
 - Có cleanup runbook cho sandbox resources không còn dùng.
 
 Circuit breaker theo contract cho AI Engine:

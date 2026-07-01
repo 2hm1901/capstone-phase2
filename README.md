@@ -10,7 +10,7 @@ Client đang phát hiện capacity exhaustion sau khi user đã complain. CDO08 
 
 Platform phải hỗ trợ:
 
-- Tối thiểu 3 service: `payment-api`, `queue-worker`, `gateway-api`.
+- Tối thiểu 3 service: `payment-gw`, `ledger`, `fraud-detector`.
 - Per-service telemetry/baseline identity qua `tenant_id`, `service_id`, `metric_type`.
 - Synthetic workload cho gradual drift, sudden spike, slow leak và noisy baseline.
 - Lead time mục tiêu ≥15 phút trong ít nhất một test window ≥2 giờ.
@@ -158,7 +158,7 @@ make tf-apply
 ./scripts/smoke-test.sh
 
 # 5. Run một scenario đã versioned
-./scripts/run-scenario.sh queue-worker gradual_drift
+python scripts/run-scenario.py gradual_drift payment-gw 7200
 
 # 6. Teardown resource demo khi không dùng
 ./scripts/teardown.sh

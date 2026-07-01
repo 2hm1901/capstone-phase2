@@ -10,7 +10,7 @@
 
 > **Sơ đồ kiến trúc:** CDO08 sẽ tự bổ sung Mermaid hoặc ảnh kiến trúc sau khi chốt account, region và endpoint cuối cùng của AI Engine. Sơ đồ cần thể hiện luồng: synthetic generator → ingest → buffer → time-series storage → prediction adapter → **AI Engine Runtime do CDO08 host** → Grafana annotation/audit/fallback.
 
-![alt text](image-1.png)
+![alt text](image.png)
 
 CDO08 thiết kế platform theo nguyên tắc **operational trust**: telemetry phải được kiểm tra trước khi lưu; lỗi tạm thời không được làm mất event âm thầm; kết quả prediction phải truy vết được; và khi AI serving lỗi, alert vẫn hoạt động theo static threshold. Đây là cách giải trực tiếp vấn đề của Client: nội bộ không được phát hiện capacity exhaustion sau support ticket.
 
@@ -59,7 +59,7 @@ Trọng tâm này có trade-off: CDO08 không ưu tiên auto-remediation, active
 
 ### 4.1 Mô hình dữ liệu
 
-Mọi telemetry event phải có tối thiểu các field sau: `tenant_id`, `service_id`, `metric_type`, `ts`, `value`, `labels`, `schema_version` và `correlation_id`. `metric_type` là tên metric trong Telemetry Contract và là field mà AI API nhận trong `signal_window`. Capstone test tối thiểu ba service: đề xuất `payment-api`, `queue-worker` và `gateway-api`; metric bắt buộc theo contract gồm `cpu_usage_percent`, `memory_usage_percent`, `active_connections`, `db_connection_pool_pct`, `queue_depth`, `cache_hit_rate_pct` và `api_latency_ms`.
+Mọi telemetry event phải có tối thiểu các field sau: `tenant_id`, `service_id`, `metric_type`, `ts`, `value`, `labels`, `schema_version` và `correlation_id`. `metric_type` là tên metric trong Telemetry Contract và là field mà AI API nhận trong `signal_window`. Capstone test tối thiểu ba service: `payment-gw`, `ledger` và `fraud-detector`; metric bắt buộc theo contract gồm `cpu_usage_percent`, `memory_usage_percent`, `active_connections`, `db_connection_pool_pct`, `queue_depth`, `cache_hit_rate_pct` và `api_latency_ms`.
 
 `tenant_id` được giữ trong schema để chứng minh logical isolation. Client cần xác nhận nó là customer/account isolation hay chỉ là service isolation. Dù định nghĩa cuối là gì, ingest Lambda bắt buộc kiểm tra `X-Tenant-Id` khớp với payload. Mismatch bị reject và audit; event không được ghi vào primary telemetry store.
 
