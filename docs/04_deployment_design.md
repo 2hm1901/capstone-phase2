@@ -26,7 +26,7 @@ Git PR
 -> Terraform plan
 -> review
 -> Terraform apply
--> ECS/CodeDeploy rollout AI Engine
+-> ECS task definition rollout AI Engine
 -> smoke test E2E
 -> attach evidence vào Jira/Docs
 ```
@@ -46,7 +46,7 @@ State khuyến nghị:
 | State locking | Native S3 lockfile `use_lockfile=true` | Chống concurrent apply bằng file `.tflock` trên S3; **không dùng DynamoDB lock table** |
 | Environment | Chỉ một môi trường shared `sandbox` | Cả nhóm dùng chung một AWS account/region như môi trường dev |
 | Naming | prefix `cdo08-*` | Tránh đụng resource team khác |
-| Tagging | `Project=TF4`, `Team=CDO08`, `Env=sandbox`, `Owner=<name>` | Cost tracking và cleanup |
+| Tagging | `Project=CDO08`, `Environment=sandbox`, `ManagedBy=Terraform` | Cost tracking và cleanup |
 
 Remote state đã được bootstrap một lần trong AWS account shared. Không chạy lại bootstrap trừ khi Tech Lead chủ động thay đổi state backend.
 
@@ -89,15 +89,15 @@ Mapping component:
 
 | Component | Terraform module | Deploy evidence |
 |---|---|---|
-| Synthetic generator | `ai_engine` hoặc app module riêng nếu generator chạy ECS task | ECS task run log, k6 profile |
+| Synthetic generator | `synthetic_generator` | ECS task run log, k6 profile |
 | API Gateway + Ingest Lambda | `telemetry_ingest` | Invoke test, invalid payload reject |
 | SQS + DLQ | `telemetry_ingest` | Queue ARN, DLQ alarm |
 | Writer Lambda → AMP | `telemetry_store` + writer package | Remote-write sample, PromQL query |
 | EventBridge Scheduler | `prediction` | Schedule ARN, invocation metric |
 | Prediction/Fallback Lambda | `prediction` | AI success/fallback smoke test |
 | AI Engine Runtime | `ai_engine` | ECS service, task health, `/health` 200 |
-| DynamoDB audit | `audit` | Audit item sample |
-| Grafana overlay | `observability` | Annotation screenshot |
+| DynamoDB audit | `observability_audit` | Audit item sample |
+| Grafana overlay | `observability_audit` + `scripts/provision_grafana.py` | Annotation screenshot |
 
 ## 3. CI/CD pipeline
 
@@ -131,7 +131,7 @@ Rule:
 | Apply | Terraform apply thủ công hoặc protected job | Deploy infra | Apply success |
 | Smoke test | script/curl/aws cli | Kiểm tra ingest, query, prediction, fallback, audit | Smoke pass |
 
-Pipeline không cần GitOps/ArgoCD trong scope hiện tại vì CDO08 deploy AWS serverless + ECS trực tiếp bằng Terraform/CodeDeploy. Nếu sau này dùng EKS mới cần ArgoCD/Flux.
+Pipeline không cần GitOps/ArgoCD trong scope hiện tại vì CDO08 deploy AWS serverless + ECS trực tiếp bằng Terraform và ECS task definition rollout. Nếu sau này dùng EKS mới cần ArgoCD/Flux.
 
 ## 4. AI Engine deployment
 
@@ -156,7 +156,7 @@ CDO08 không sửa model logic. Nếu image AI không chạy, CDO08 report bằn
 
 ### 4.2 Rollout strategy
 
-Rollout AI Engine dùng canary theo Deployment Contract:
+Deployment Contract định nghĩa rollout canary target như sau:
 
 | Step | Traffic | Thời gian quan sát |
 |---|---:|---:|
@@ -164,16 +164,16 @@ Rollout AI Engine dùng canary theo Deployment Contract:
 | 2 | 50% | 5 phút |
 | 3 | 100% | giữ |
 
-Primary deployment method:
+Primary deployment method W12 hiện tại:
+
+```text
+Terraform cập nhật ECS task definition + ECS service rollout
+```
+
+Future hardening sau W12:
 
 ```text
 AWS CodeDeploy blue/green hoặc canary cho ECS service
-```
-
-Fallback nếu chưa kịp CodeDeploy trong W11:
-
-```text
-ECS service update task definition thủ công + giữ previous task definition để rollback
 ```
 
 Abort criteria:
@@ -188,8 +188,8 @@ Rollback:
 
 | Method | Khi dùng | Target |
 |---|---|---|
-| CodeDeploy rollback to previous task definition | Normal path | <60 giây theo contract |
-| ECS service revert manual | Nếu CodeDeploy chưa sẵn | Best effort W11, ghi rõ limitation |
+| ECS service revert to previous task definition | Normal W12 path | Best effort, có evidence bằng task definition revision và target health |
+| CodeDeploy rollback to previous task definition | Future hardening | Chưa là path chính trong W12 |
 | Scale desired count = 0 | Cost circuit breaker hoặc runaway cost | Dừng cost, platform chuyển fallback |
 
 ### 4.3 W11/W12 delivery mode
@@ -284,9 +284,9 @@ Phân tách ownership bằng prefix/resource tag:
 
 ```text
 cdo08-*
-Project=TF4
-Team=CDO08
-Env=sandbox
+Project=CDO08
+Environment=sandbox
+ManagedBy=Terraform
 ```
 
 Không dùng production traffic hoặc production mirror trong `sandbox`.
@@ -295,7 +295,7 @@ Không dùng production traffic hoặc production mirror trong `sandbox`.
 
 Nguyên tắc:
 
-- CI/CD dùng GitHub OIDC assume role, không dùng long-lived AWS access key.
+- Nếu bật CI/CD tự động sau W12, dùng GitHub OIDC assume role; không dùng long-lived AWS access key trong pipeline.
 - Không commit `.tfvars`, `.env`, Terraform state, Grafana token, AWS credential.
 - Secret thật để trong Secrets Manager; config không nhạy cảm để trong SSM Parameter Store hoặc Terraform variable.
 - Lambda/ECS chỉ đọc đúng secret/config cần dùng.
@@ -304,9 +304,9 @@ Secrets/config:
 
 | Item | Storage | Consumer |
 |---|---|---|
-| Grafana service account token | Secrets Manager `cdo08/grafana` | Prediction/Fallback Lambda |
+| Grafana service account token | Secrets Manager secret `cdo08-sandbox-grafana-token-*` | Prediction/Fallback Lambda |
 | Ingest HMAC/API key nếu không dùng IAM | Secrets Manager `cdo08/telemetry-ingest` | Generator |
-| AI Engine endpoint/internal DNS | SSM/Terraform output | Prediction Lambda |
+| AI Engine endpoint/internal DNS | Terraform output + SSM parameter `/<name_prefix>/ai/endpoint` | Prediction Lambda |
 | Baseline bucket/path | SSM/Terraform var | AI Engine task |
 | OTel collector endpoint nếu triển khai | SSM/Terraform var | AI Engine task |
 
@@ -316,12 +316,13 @@ Secrets/config:
 
 | Log group | Retention | Nội dung |
 |---|---:|---|
-| `/aws/lambda/cdo08-ingest` | 14–30 ngày | validation reject/success metadata |
-| `/aws/lambda/cdo08-writer` | 14–30 ngày | AMP remote-write success/error |
-| `/aws/lambda/cdo08-prediction` | 14–30 ngày | PromQL query hash, AI status, latency |
-| `/aws/lambda/cdo08-fallback` | 14–30 ngày | fallback threshold decision |
-| `/ecs/cdo08-ai-engine/app` | 14 ngày | FastAPI app logs |
-| `/ecs/cdo08-ai-engine/audit` | 1 năm | AI audit fields theo contract |
+| `/aws/lambda/cdo08-sandbox-ingest` | 14–30 ngày | validation reject/success metadata |
+| `/aws/lambda/cdo08-sandbox-telemetry-writer` | 14–30 ngày | AMP remote-write success/error |
+| `/aws/lambda/cdo08-sandbox-prediction-lambda` | 14–30 ngày | PromQL query hash, AI status, latency |
+| `/aws/lambda/cdo08-sandbox-serving-adapter-lambda` | 14–30 ngày | AI API Gateway SigV4 call status, retry/fallback decision |
+| `/aws/lambda/cdo08-sandbox-fallback-lambda` | 14–30 ngày | fallback threshold decision |
+| `/ecs/cdo08-sandbox-ai-engine-app` | 14 ngày | FastAPI app logs |
+| `/ecs/cdo08-sandbox-ai-engine-audit` | 1 năm | AI audit fields theo contract |
 
 ### 8.2 Alarms
 
