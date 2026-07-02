@@ -10,13 +10,12 @@
 
 CDO08 cần chứng minh platform Foresight Lens có thể chạy dưới rough cap **$200/tháng** cho scope capstone. Chi phí cần được giải thích theo driver chính, không chỉ đưa tổng số. Với kiến trúc hiện tại, cost driver quan trọng nhất là:
 
-1. AI Engine Runtime ECS Fargate chạy 24/7.
-2. Internal ALB cho AI Engine.
-3. Amazon Managed Grafana user/workspace.
-4. CloudWatch logs/alarms.
-5. Telemetry ingestion volume nếu sampling interval quá dày.
+1. Fixed monthly services: VPC endpoints, AI Engine ECS Fargate, ALB, Managed Grafana, KMS/Secrets/S3/ECR.
+2. Telemetry volume: số data point ingest/query qua AMP, API Gateway, Lambda, SQS và Writer.
+3. Log volume: CloudWatch log ingestion/retention từ generator, Lambda và AI Engine.
+4. Test runtime: ECS k6 generator chỉ nên chạy theo test window.
 
-Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo `3 services × 7 metrics × 60s` thì AMP ingest/query cost dự kiến thấp. Rủi ro chỉ tăng mạnh nếu sampling giảm xuống 10s/1s hoặc volume tiến gần mức contract peak.
+CDO08 không tính cost theo concurrent users như một web application truyền thống. Hạ tầng này chủ yếu tốn tiền theo **telemetry volume**: càng nhiều service, metric, sample interval ngắn và prediction query nhiều thì AMP/API/Lambda/SQS/CloudWatch càng tăng. Fixed monthly cost vẫn tồn tại vì một số managed resources tính tiền theo giờ, nhưng phần cần kiểm soát khi scale là telemetry.
 
 ## 2. Assumptions for W12 forecast
 
@@ -26,6 +25,9 @@ Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo 
 | Services demo | 3 | `payment-gw`, `ledger`, `fraud-detector` |
 | Metrics/service | 7 | Theo Telemetry Contract |
 | Telemetry emit interval | 60s | 1 data point/phút/metric/service |
+| Low telemetry case | ~20M data points/month | Demo/sandbox mở rộng nhẹ |
+| Mid telemetry case | ~200M data points/month | Nhiều test window hoặc sampling dày hơn |
+| High telemetry case | ~1B data points/month | Stress/capacity-style volume; ngoài scope vận hành hằng ngày W12 |
 | Prediction interval | 5 phút/service | EventBridge Scheduler |
 | Prediction lookback | ≥120 phút | AI API Contract |
 | AI Engine compute | ECS Fargate 0.5 vCPU, 1 GB | Theo Deployment Contract hiện tại |
@@ -68,6 +70,14 @@ CDO08 dùng 60s làm default.
 1s không dùng cho baseline/demo mặc định.
 ```
 
+Volume planning cho cost forecast:
+
+| Volume tier | Data points/month | Khi nào dùng để ước tính |
+|---|---:|---|
+| Low | ~20M | Demo/sandbox có thêm test nhưng vẫn dưới cap |
+| Mid | ~200M | Nhiều service/scenario hơn hoặc sampling dày hơn trong test window |
+| High | ~1B | Capacity/stress estimate; không phải mức vận hành mặc định W12 |
+
 ### 3.2 Prediction calls
 
 ```text
@@ -91,42 +101,47 @@ Query samples processed estimate:
 
 Con số này thấp cho capstone. Prediction cost chủ yếu nằm ở Lambda invocation, AI Engine runtime và audit/annotation side effects, không phải AMP query volume.
 
-## 4. Monthly forecast by component
+## 4. Monthly forecast by telemetry volume
 
 > **Note:** Số dưới đây là W12 forecast dựa trên services đang deploy. Cần attach thêm Cost Explorer/Budget screenshot để biến forecast thành measured evidence. Unit price có thể thay đổi theo region và account/free tier nên không xem đây là invoice.
 
-| Component | Usage assumption | Forecast/month | Cost driver | Control |
-|---|---:|---:|---|---|
-| ECS Fargate AI Engine | 2 tasks, 0.5 vCPU/1GB, 24/7 | ~$35–$45 | Always-on compute | Right-size, scale down outside demo if allowed |
-| Internal ALB | 1 ALB 24/7 | ~$16–$30 | Fixed hourly + LCU | Reuse one ALB, avoid extra ALB |
-| ECS/Fargate synthetic generator | Test windows only | ~$0–$5 | Runtime hours | Stop after test, no 24/7 generator |
-| API Gateway ingest | ~0.9M telemetry requests/month if one event/request | ~$0–$2 | Request count | Batch if needed, throttle |
-| Lambda ingest/writer/prediction/fallback | Low million invocations/month | ~$0–$3 | Invocation + duration | Batch SQS writer, cap concurrency |
-| SQS + telemetry DLQ | ~0.9M messages/month | ~$0–$1 | API requests | Retention sane, DLQ alarm |
-| AMP | ~0.9M ingested samples + ~21.8M query samples | ~$0–$2 | Samples, active series, query | 60s sampling, low cardinality labels |
-| DynamoDB audit | ~25,920 prediction records/month + fallback records | ~$0–$2 | Writes/storage | TTL, on-demand |
-| S3 baseline storage | Small JSON/CSV baseline files | <$1 | GB-month + requests | Lifecycle if grows |
-| CloudWatch Logs/Alarms | Lambda/ECS logs + alarms | ~$2–$10 | Log volume/retention | Structured logs, 14–30d app retention |
-| AI Engine audit logs | Low volume, retention 1 year | ~$0–$3 initially | Long retention | Log only required audit fields |
-| Managed Grafana | 1 workspace/user minimum | ~$9–$30 | Active users/license | Minimal users/service accounts |
-| Secrets Manager/SSM/KMS | Few secrets/keys | ~$1–$5 | Secret/month + KMS requests | Avoid unnecessary secrets |
-| SNS email alerts | Prediction/fallback anomaly notifications | <$1 at demo volume | Email notifications, topic requests | Keep subscribers minimal; confirm only required recipients |
-| EventBridge Scheduler | ~25,920 invokes/month | ~$0 | Free tier likely covers | 5-min cadence |
-| VPC interface endpoints | ECR API, ECR DKR, Logs across 2 AZs | ~$40–$45 + data | Endpoint hourly per AZ | Keep only endpoints required by private ECS path |
-| **Total forecast** | Current deployed shape, if kept 24/7 | **~$125–$155/month** | Mostly Fargate + ALB + endpoints + Grafana | Under $200 with guardrails enforced |
-| **Cost risk case** | Extra users/log volume/data egress or extra always-on tasks | **Can approach/exceed $200** | Fixed hourly services | Disable generator and scale down AI after demo if needed |
+| Service | Tăng tiền khi nào? | Low ~20M | Mid ~200M | High ~1B | Ghi chú |
+|---|---|---:|---:|---:|---|
+| **Trả cố định hằng tháng** |  |  |  |  |  |
+| VPC endpoints | Không tăng theo telemetry; bật endpoint là tính tiền | ~$42 | ~$42 | ~$43 | 3 endpoint services × 2 AZ |
+| Fargate AI Engine | Tăng khi thêm task/scale service | ~$40 | ~$40 | ~$60 | +1 task khi volume/service lớn |
+| ALB | Gần như cố định ở mức demo | ~$23 | ~$23 | ~$25 | Đường dẫn nội bộ tới AI |
+| Grafana | Tăng theo số người xem/editor | ~$19 | ~$19 | ~$19 | Tính theo user/workspace |
+| KMS/Secrets/S3/ECR | Gần như cố định ở mức demo | ~$5 | ~$6 | ~$8 | Key/secret/baseline/image storage |
+| **Trả theo mức dùng** |  |  |  |  |  |
+| AMP | Tăng theo data point ingest, active series và query samples | ~$2 | ~$18 | ~$95 | Tốn nhất khi scale telemetry |
+| CloudWatch | Tăng theo log ghi ra và retention | ~$3 | ~$15 | ~$50 | Cắt bằng log ngắn, structured log, giảm debug |
+| Generator ECS | Tăng theo thời gian chạy và task size | ~$3 | ~$8 | ~$20 | Chỉ chạy lúc test |
+| Lambda | Tăng theo số event/query/prediction package xử lý | ~$0.5 | ~$3 | ~$12 | ingest/writer/prediction/adapter/fallback |
+| API Gateway | Tăng theo lượt gọi ingest + AI API | ~$0.2 | ~$2 | ~$10 | Ingest API và AI SigV4 API |
+| DynamoDB | Tăng theo số prediction/fallback audit writes/query | ~$0.5 | ~$2 | ~$6 | Theo số lần predict |
+| SQS | Tăng theo số message qua queue/DLQ | ~$0.2 | ~$1 | ~$4 | Queue/DLQ |
+| SNS email alerts | Tăng theo số alert gửi ra | <$1 | <$1 | ~$1 | Demo volume thấp; tránh spam bằng cooldown |
+| EventBridge Scheduler | Tăng theo số schedule/invocation | ~$0 | ~$0 | ~$1 | 5-min cadence/service |
+| **Total forecast** | Theo telemetry volume, không theo concurrent user | **~$140** | **~$180** | **~$350** | Low/Mid dưới hoặc gần cap; High vượt cap |
 
-## 5. Cost per demo service / tenant
+## 5. Cost scaling interpretation
 
-CDO08 đang demo 3 logical services trên shared platform. Fixed cost không chia đều tốt khi chỉ có 3 services, nhưng cần estimate để mentor thấy scaling behavior.
+CDO08 dùng bảng trên để giải thích cost theo telemetry:
 
-| Scenario | Monthly total | Effective cost/service/month | Note |
-|---|---:|---:|---|
-| 3 services demo | ~$125–$155 | ~$42–$52 | Capstone baseline with current managed services |
-| 10 services same platform | ~$80–$150 | ~$8–$15 | Fixed cost amortized |
-| 50 services same platform | Not load-tested in W12 | Lower fixed cost/service, but AMP/cardinality/query grow | Design-level only; outside capstone implementation scope |
+- **Fixed monthly cost** gần như không đổi khi tăng nhẹ telemetry: VPC endpoints, AI Engine base tasks, ALB, Grafana và KMS/Secrets/S3/ECR.
+- **Usage-based cost** tăng theo data point và log volume: AMP, CloudWatch, Generator ECS, Lambda, API Gateway, DynamoDB và SQS.
+- **Low ~20M** là mức hợp lý cho sandbox/demo có thêm test window.
+- **Mid ~200M** vẫn có thể nằm trong mục tiêu khoảng `$200/tháng` nếu log được kiểm soát.
+- **High ~1B** là stress/capacity estimate, không phải mức vận hành mặc định; ở mức này AMP và CloudWatch là hai cost driver chính.
 
-Production note: per-service cost giảm khi fixed cost như ALB, Grafana, base ECS service được dùng chung. Nhưng telemetry cardinality, query volume và dashboard usage sẽ tăng theo service count.
+Kết luận: CDO08 không scale cost theo số concurrent users. Hệ thống scale cost chủ yếu theo công thức:
+
+```text
+services × metrics/service × samples/minute × test/runtime duration
++ prediction query volume
++ log volume
+```
 
 ## 6. Cost vs alternatives
 
@@ -145,7 +160,7 @@ Production note: per-service cost giảm khi fixed cost như ALB, Grafana, base 
 W11/W12 must-have:
 
 - AWS Budget alert ở 80% `$160` và 100% `$200`.
-- Resource tagging bắt buộc: `Project=TF4`, `Team=CDO08`, `Env`, `Owner`.
+- Resource tagging bắt buộc theo Terraform: `Project=CDO08`, `Environment=sandbox`, `ManagedBy=Terraform`.
 - Generator chỉ chạy trong test window; teardown/stop sau test.
 - Default telemetry sampling 60s.
 - Prediction interval 5 phút/service; không gọi AI theo từng data point.
@@ -171,6 +186,7 @@ Budget >= 100% cap
 | Evidence | Source |
 |---|---|
 | Daily service cost | AWS Cost Explorer/Billing |
+| Telemetry data point estimate | Generator config, API Gateway/Lambda request count, AMP usage if exposed |
 | ECS AI Engine task hours | ECS service metrics/task history |
 | Lambda invocations/duration | CloudWatch metrics |
 | API Gateway request count | CloudWatch/API Gateway metrics |
@@ -182,21 +198,23 @@ Budget >= 100% cap
 
 ### 8.2 Actual spend table - W12 capture
 
-| Service | Forecast | Actual W12 evidence | Delta / note |
-|---|---:|---|---|
-| ECS Fargate AI Engine | ~$35–$45 | Capture Cost Explorer/ECS task-hours screenshot | Fixed 2 tasks 24/7 while demo is active |
-| ALB | ~$16–$30 | Capture Cost Explorer ELB line | Required for internal AI Engine path |
-| Generator ECS task | ~$0–$5 | Capture ECS task run duration/k6 summary | Only during test windows |
-| API Gateway | ~$0–$2 | Capture API Gateway request metrics | Ingest + AI API |
-| Lambda | ~$0–$3 | Capture Lambda invocations/duration | Ingest/writer/prediction/adapter/fallback |
-| SQS | ~$0–$1 | Capture SQS metrics | Queue/DLQ low volume |
-| AMP | ~$0–$5 | Capture AMP/CloudWatch usage if available | Demo sample volume low |
-| DynamoDB | ~$0–$2 | Capture DynamoDB consumed/write metrics | Audit records low volume |
-| CloudWatch | ~$2–$10+ | Capture log ingestion/storage | Main variable cost if logs are verbose |
-| Grafana | ~$9–$30 | Capture Grafana workspace/users | Depends active users |
-| KMS/Secrets/SSM/S3/ECR | ~$1–$8 | Capture Cost Explorer grouped services | Includes baseline bucket, secrets, ECR images |
-| VPC endpoints | ~$40–$45 + data | Capture VPC endpoint count | 3 endpoint services × 2 AZ |
-| **Total** | **~$125–$155** | Capture Cost Explorer total | Should stay below `$200` with guardrails |
+| Service | Low ~20M | Mid ~200M | High ~1B | Actual W12 evidence | Delta / note |
+|---|---:|---:|---:|---|---|
+| VPC endpoints | ~$42 | ~$42 | ~$43 | Capture VPC endpoint count | Fixed monthly, 3 endpoint services × 2 AZ |
+| Fargate AI Engine | ~$40 | ~$40 | ~$60 | Capture ECS task-hours screenshot | Fixed base; grows only if adding tasks |
+| ALB | ~$23 | ~$23 | ~$25 | Capture Cost Explorer ELB line | Internal AI path |
+| Grafana | ~$19 | ~$19 | ~$19 | Capture Grafana workspace/users | Depends users, not telemetry |
+| KMS/Secrets/S3/ECR | ~$5 | ~$6 | ~$8 | Capture Cost Explorer grouped services | Key/secret/baseline/image |
+| AMP | ~$2 | ~$18 | ~$95 | Capture AMP/CloudWatch usage if available | Main telemetry-volume cost driver |
+| CloudWatch | ~$3 | ~$15 | ~$50 | Capture log ingestion/storage | Main variable cost if logs are verbose |
+| Generator ECS | ~$3 | ~$8 | ~$20 | Capture ECS task run duration/k6 summary | Only during test windows |
+| Lambda | ~$0.5 | ~$3 | ~$12 | Capture Lambda invocations/duration | ingest/writer/prediction/adapter/fallback |
+| API Gateway | ~$0.2 | ~$2 | ~$10 | Capture API Gateway request metrics | ingest + AI API |
+| DynamoDB | ~$0.5 | ~$2 | ~$6 | Capture DynamoDB consumed/write metrics | Audit writes/query |
+| SQS | ~$0.2 | ~$1 | ~$4 | Capture SQS metrics | Queue/DLQ |
+| SNS email alerts | <$1 | <$1 | ~$1 | Capture SNS/email alert count | Demo volume low |
+| EventBridge Scheduler | ~$0 | ~$0 | ~$1 | Capture scheduler invocation count | 5-min cadence/service |
+| **Total** | **~$140** | **~$180** | **~$350** | Capture Cost Explorer total | Low/Mid acceptable; High exceeds cap |
 
 ### 8.3 Cost per useful prediction - W12 calculation
 
@@ -218,6 +236,7 @@ Budget >= 100% cap
 | AI Engine desired count | Keep min 2 for contract/demo availability while testing; scale down only after demo/evidence if cost guardrail triggers |
 | Grafana | Managed Grafana is kept for W12 because annotation overlay is a core requirement |
 | AMP usage metrics | Capture if exposed; otherwise use request/sample model + Grafana evidence |
+| Cost model | Cost is explained by telemetry volume tiers: Low ~20M, Mid ~200M, High ~1B data points/month |
 | 50k events/sec peak | Design-level capacity only; W12 implementation validates demo scope, not full production peak |
 
 Remaining evidence: Cost Explorer by service, AWS Budget screenshot, and Grafana cost explanation screenshots.
