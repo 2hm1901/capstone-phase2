@@ -1,5 +1,33 @@
 data "aws_caller_identity" "current" {}
 
+locals {
+  email_alert_topic_arn = var.enable_email_alerts ? aws_sns_topic.email_alerts[0].arn : null
+}
+
+# ==============================================================================
+# 0. SNS EMAIL ALERTING
+# ==============================================================================
+
+resource "aws_sns_topic" "email_alerts" {
+  count = var.enable_email_alerts ? 1 : 0
+
+  name              = "${var.name_prefix}-prediction-alerts"
+  kms_master_key_id = "alias/aws/sns"
+
+  tags = merge(var.tags, {
+    Name      = "${var.name_prefix}-prediction-alerts"
+    Component = "alerting"
+  })
+}
+
+resource "aws_sns_topic_subscription" "email_alerts" {
+  for_each = var.enable_email_alerts ? toset(var.alert_email_subscribers) : []
+
+  topic_arn = aws_sns_topic.email_alerts[0].arn
+  protocol  = "email"
+  endpoint  = each.value
+}
+
 # ==============================================================================
 # 1. KMS CUSTOMER MANAGED KEY (CMK)
 # ==============================================================================
@@ -438,8 +466,11 @@ data "aws_iam_policy_document" "prediction" {
   }
 
   statement {
-    effect    = "Allow"
-    actions   = ["dynamodb:PutItem"]
+    effect = "Allow"
+    actions = [
+      "dynamodb:PutItem",
+      "dynamodb:Query"
+    ]
     resources = ["arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${var.name_prefix}-audit*"]
   }
 
@@ -457,6 +488,16 @@ data "aws_iam_policy_document" "prediction" {
       "kms:GenerateDataKey*"
     ]
     resources = [aws_kms_key.security.arn]
+  }
+
+  dynamic "statement" {
+    for_each = local.email_alert_topic_arn == null ? [] : [local.email_alert_topic_arn]
+
+    content {
+      effect    = "Allow"
+      actions   = ["sns:Publish"]
+      resources = [statement.value]
+    }
   }
 }
 
@@ -563,6 +604,16 @@ data "aws_iam_policy_document" "fallback" {
       "kms:GenerateDataKey*"
     ]
     resources = [aws_kms_key.security.arn]
+  }
+
+  dynamic "statement" {
+    for_each = local.email_alert_topic_arn == null ? [] : [local.email_alert_topic_arn]
+
+    content {
+      effect    = "Allow"
+      actions   = ["sns:Publish"]
+      resources = [statement.value]
+    }
   }
 }
 

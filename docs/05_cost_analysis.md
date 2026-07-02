@@ -2,9 +2,9 @@
 
 **Document owner:** CDO08
 
-**Status:** Skeleton (W11) → Measured actual (W12)
+**Status:** Final draft for W12 Evidence Pack #2
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-01
 
 ## 1. Mục tiêu cost
 
@@ -14,12 +14,11 @@ CDO08 cần chứng minh platform Foresight Lens có thể chạy dưới rough 
 2. Internal ALB cho AI Engine.
 3. Amazon Managed Grafana user/workspace.
 4. CloudWatch logs/alarms.
-5. NAT Gateway của workload VPC nếu để chạy 24/7 ngoài test window.
-6. Telemetry ingestion volume nếu sampling interval quá dày.
+5. Telemetry ingestion volume nếu sampling interval quá dày.
 
 Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo `3 services × 7 metrics × 60s` thì AMP ingest/query cost dự kiến thấp. Rủi ro chỉ tăng mạnh nếu sampling giảm xuống 10s/1s hoặc volume tiến gần mức contract peak.
 
-## 2. Assumptions for W11 forecast
+## 2. Assumptions for W12 forecast
 
 | Assumption | Value | Note |
 |---|---:|---|
@@ -33,7 +32,6 @@ Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo 
 | AI Engine replicas | min 2, max 4 | Forecast dùng min 2 chạy 24/7 |
 | AI algorithm | Statistical time-series, không Bedrock LLM | Không có Bedrock inference cost |
 | Generator runtime | Chỉ chạy test window | Không chạy 24/7 nếu không cần |
-| NAT Gateway | 1 workload NAT trong test window | ECS k6 chạy private subnet cần outbound để pull image, ghi logs và gọi API Gateway ingest |
 
 ## 3. Telemetry volume estimate
 
@@ -95,12 +93,12 @@ Con số này thấp cho capstone. Prediction cost chủ yếu nằm ở Lambda 
 
 ## 4. Monthly forecast by component
 
-> **Note:** Số dưới đây là W11 forecast để review architecture. W12 phải thay bằng actual từ AWS Cost Explorer/Billing + CloudWatch usage. Unit price thay đổi theo region và free tier nên không xem đây là invoice.
+> **Note:** Số dưới đây là W12 forecast dựa trên services đang deploy. Cần attach thêm Cost Explorer/Budget screenshot để biến forecast thành measured evidence. Unit price có thể thay đổi theo region và account/free tier nên không xem đây là invoice.
 
 | Component | Usage assumption | Forecast/month | Cost driver | Control |
 |---|---:|---:|---|---|
 | ECS Fargate AI Engine | 2 tasks, 0.5 vCPU/1GB, 24/7 | ~$35–$45 | Always-on compute | Right-size, scale down outside demo if allowed |
-| Internal ALB | 1 ALB 24/7 | ~$20–$30 | Fixed hourly + LCU | Reuse one ALB, avoid extra ALB |
+| Internal ALB | 1 ALB 24/7 | ~$16–$30 | Fixed hourly + LCU | Reuse one ALB, avoid extra ALB |
 | ECS/Fargate synthetic generator | Test windows only | ~$0–$5 | Runtime hours | Stop after test, no 24/7 generator |
 | API Gateway ingest | ~0.9M telemetry requests/month if one event/request | ~$0–$2 | Request count | Batch if needed, throttle |
 | Lambda ingest/writer/prediction/fallback | Low million invocations/month | ~$0–$3 | Invocation + duration | Batch SQS writer, cap concurrency |
@@ -112,10 +110,11 @@ Con số này thấp cho capstone. Prediction cost chủ yếu nằm ở Lambda 
 | AI Engine audit logs | Low volume, retention 1 year | ~$0–$3 initially | Long retention | Log only required audit fields |
 | Managed Grafana | 1 workspace/user minimum | ~$9–$30 | Active users/license | Minimal users/service accounts |
 | Secrets Manager/SSM/KMS | Few secrets/keys | ~$1–$5 | Secret/month + KMS requests | Avoid unnecessary secrets |
+| SNS email alerts | Prediction/fallback anomaly notifications | <$1 at demo volume | Email notifications, topic requests | Keep subscribers minimal; confirm only required recipients |
 | EventBridge Scheduler | ~25,920 invokes/month | ~$0 | Free tier likely covers | 5-min cadence |
-| NAT Gateway | 1 workload NAT when ECS k6 is used | Can add ~$30–$70+ if left 24/7 | Hourly + data processing | Keep bounded to test window; do not add extra NATs |
-| **Total forecast** | With bounded workload NAT | **~$70–$135/month + NAT active time** | Mostly Fargate + ALB + Grafana + logs | Under $200 if guardrails enforced |
-| **Worst likely if NAT left 24/7** | One NAT 24/7 | **~$110–$200+** | NAT fixed cost | Cleanup/review after demo |
+| VPC interface endpoints | ECR API, ECR DKR, Logs across 2 AZs | ~$40–$45 + data | Endpoint hourly per AZ | Keep only endpoints required by private ECS path |
+| **Total forecast** | Current deployed shape, if kept 24/7 | **~$125–$155/month** | Mostly Fargate + ALB + endpoints + Grafana | Under $200 with guardrails enforced |
+| **Cost risk case** | Extra users/log volume/data egress or extra always-on tasks | **Can approach/exceed $200** | Fixed hourly services | Disable generator and scale down AI after demo if needed |
 
 ## 5. Cost per demo service / tenant
 
@@ -123,10 +122,9 @@ CDO08 đang demo 3 logical services trên shared platform. Fixed cost không chi
 
 | Scenario | Monthly total | Effective cost/service/month | Note |
 |---|---:|---:|---|
-| 3 services demo, no NAT | ~$70–$135 | ~$23–$45 | Capstone baseline |
-| 3 services demo, one NAT | ~$110–$200+ | ~$37–$67+ | Risky near cap |
+| 3 services demo | ~$125–$155 | ~$42–$52 | Capstone baseline with current managed services |
 | 10 services same platform | ~$80–$150 | ~$8–$15 | Fixed cost amortized |
-| 50 services same platform | TBD W12 | Lower fixed cost/service, but AMP/cardinality/query grow | Need load model |
+| 50 services same platform | Not load-tested in W12 | Lower fixed cost/service, but AMP/cardinality/query grow | Design-level only; outside capstone implementation scope |
 
 Production note: per-service cost giảm khi fixed cost như ALB, Grafana, base ECS service được dùng chung. Nhưng telemetry cardinality, query volume và dashboard usage sẽ tăng theo service count.
 
@@ -140,7 +138,6 @@ Production note: per-service cost giảm khi fixed cost như ALB, Grafana, base 
 | Self-managed Prometheus/InfluxDB | Higher ops/storage risk | Không phù hợp W11/W12 timeline |
 | AI Engine on ECS Fargate | Moderate fixed cost | Contract yêu cầu FastAPI/container; predictable runtime |
 | AI Engine on Lambda container | Potentially lower fixed cost | Chỉ cân nhắc nếu AI artifact light, startup/latency phù hợp |
-| NAT Gateway for private k6 egress | High fixed cost | Chỉ dùng 1 NAT ở workload VPC cho ECS k6; AI VPC dùng VPC endpoints |
 | Sampling 10s/1s | Increases AMP/API/Lambda volume | Không cần cho capacity trend; 60s khớp contract |
 
 ## 7. Cost guardrails
@@ -155,7 +152,6 @@ W11/W12 must-have:
 - Lambda reserved/max concurrency cho ingest/prediction.
 - SQS queue retention vừa đủ demo; DLQ có alarm.
 - CloudWatch app log retention 14–30 ngày; AI audit log retention 1 năm theo contract.
-- Không tạo thêm NAT Gateway; workload NAT chỉ phục vụ ECS k6 trong test window và cần review cleanup sau demo.
 - Scale-to-zero/circuit breaker cho ECS AI Engine nếu cost vượt ngưỡng nguy hiểm theo Deployment Contract.
 
 Circuit breaker action:
@@ -184,44 +180,47 @@ Budget >= 100% cap
 | Grafana users/workspace cost | AWS billing/Grafana workspace |
 | CloudWatch log ingestion/storage | CloudWatch usage/billing |
 
-### 8.2 Actual spend table - fill in W12
+### 8.2 Actual spend table - W12 capture
 
-| Service | Forecast | Actual W12 | Delta | Reason |
-|---|---:|---:|---:|---|
-| ECS Fargate AI Engine | ~$35–$45 | TBD | TBD | TBD |
-| ALB | ~$20–$30 | TBD | TBD | TBD |
-| Generator ECS task | ~$0–$5 | TBD | TBD | TBD |
-| API Gateway | ~$0–$2 | TBD | TBD | TBD |
-| Lambda | ~$0–$3 | TBD | TBD | TBD |
-| SQS | ~$0–$1 | TBD | TBD | TBD |
-| AMP | ~$0–$2 | TBD | TBD | TBD |
-| DynamoDB | ~$0–$2 | TBD | TBD | TBD |
-| CloudWatch | ~$2–$10 | TBD | TBD | TBD |
-| Grafana | ~$9–$30 | TBD | TBD | TBD |
-| KMS/Secrets/SSM/S3 | ~$1–$6 | TBD | TBD | TBD |
-| NAT Gateway | 1 workload NAT during k6 test window | TBD | TBD | Must explain active hours and cleanup decision |
-| **Total** | **~$70–$135** | **TBD** | **TBD** | **TBD** |
+| Service | Forecast | Actual W12 evidence | Delta / note |
+|---|---:|---|---|
+| ECS Fargate AI Engine | ~$35–$45 | Capture Cost Explorer/ECS task-hours screenshot | Fixed 2 tasks 24/7 while demo is active |
+| ALB | ~$16–$30 | Capture Cost Explorer ELB line | Required for internal AI Engine path |
+| Generator ECS task | ~$0–$5 | Capture ECS task run duration/k6 summary | Only during test windows |
+| API Gateway | ~$0–$2 | Capture API Gateway request metrics | Ingest + AI API |
+| Lambda | ~$0–$3 | Capture Lambda invocations/duration | Ingest/writer/prediction/adapter/fallback |
+| SQS | ~$0–$1 | Capture SQS metrics | Queue/DLQ low volume |
+| AMP | ~$0–$5 | Capture AMP/CloudWatch usage if available | Demo sample volume low |
+| DynamoDB | ~$0–$2 | Capture DynamoDB consumed/write metrics | Audit records low volume |
+| CloudWatch | ~$2–$10+ | Capture log ingestion/storage | Main variable cost if logs are verbose |
+| Grafana | ~$9–$30 | Capture Grafana workspace/users | Depends active users |
+| KMS/Secrets/SSM/S3/ECR | ~$1–$8 | Capture Cost Explorer grouped services | Includes baseline bucket, secrets, ECR images |
+| VPC endpoints | ~$40–$45 + data | Capture VPC endpoint count | 3 endpoint services × 2 AZ |
+| **Total** | **~$125–$155** | Capture Cost Explorer total | Should stay below `$200` with guardrails |
 
-### 8.3 Cost per useful prediction - fill in W12
+### 8.3 Cost per useful prediction - W12 calculation
 
 | Metric | Value |
 |---|---:|
-| Total prediction calls | TBD |
-| Valid AI responses | TBD |
-| Fallback responses | TBD |
-| Correct early warnings | TBD |
-| False positives | TBD |
-| Monthly platform cost during test | TBD |
-| Cost per correct early warning | TBD |
+| Total prediction calls | Count from Prediction Lambda logs / CloudWatch invocations |
+| Valid AI responses | Count `prediction_completed` and Serving Adapter success logs |
+| Fallback responses | Count fallback logs/annotations |
+| Correct early warnings | Count scenario annotations that match ground truth |
+| False positives | Count annotations during `noisy_baseline` window |
+| Monthly platform cost during test | Use Cost Explorer/Budget screenshot |
+| Cost per correct early warning | `monthly platform cost / correct early warnings`; report only after final evidence count |
 
-## 9. Open questions
+## 9. Resolved W12 cost decisions
 
-- [x] Region/account pricing final là gì? — `us-east-1` trên shared sandbox AWS account.
-- [ ] AI Engine có bắt buộc min 2 tasks 24/7 trong demo không, hay được scale down ngoài test window?
-- [x] Có cần NAT Gateway để AI Engine đọc S3/CloudWatch/OTel không? — AI VPC không dùng NAT; dùng VPC endpoints cho S3/ECR/CloudWatch Logs. Workload VPC có 1 NAT cho ECS k6 private outbound.
-- [ ] Managed Grafana pricing/user count thực tế trong account mentor là bao nhiêu?
-- [ ] AMP usage metrics trong account có expose đủ để đo samples ingested/query không?
-- [ ] W12 có cần mô phỏng 50,000 events/sec peak không, hay chỉ design-level volume SLA?
+| Topic | Decision |
+|---|---|
+| Region/account pricing | `us-east-1` on shared sandbox AWS account |
+| AI Engine desired count | Keep min 2 for contract/demo availability while testing; scale down only after demo/evidence if cost guardrail triggers |
+| Grafana | Managed Grafana is kept for W12 because annotation overlay is a core requirement |
+| AMP usage metrics | Capture if exposed; otherwise use request/sample model + Grafana evidence |
+| 50k events/sec peak | Design-level capacity only; W12 implementation validates demo scope, not full production peak |
+
+Remaining evidence: Cost Explorer by service, AWS Budget screenshot, and Grafana cost explanation screenshots.
 
 ## Related documents
 

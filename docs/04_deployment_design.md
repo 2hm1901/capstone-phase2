@@ -2,9 +2,9 @@
 
 **Document owner:** CDO08
 
-**Status:** Draft (W11)
+**Status:** Final draft for W12 Evidence Pack #2
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-01
 
 ## 1. Mục tiêu triển khai
 
@@ -54,19 +54,19 @@ Lưu ý: các phần dưới có nhắc **DynamoDB audit table** là nơi lưu p
 
 ### 2.2 Terraform module structure
 
-Cấu trúc repo đề xuất:
+Cấu trúc Terraform thực tế W12:
 
 ```text
 infra/
 ├── modules/
-│   ├── network/              # VPC, public/private subnets, SG, ALB path nếu cần
-│   ├── telemetry_ingest/     # API Gateway, Lambda Ingest, SQS, telemetry DLQ
-│   ├── telemetry_store/      # AMP workspace, remote-write/query config
-│   ├── prediction/           # EventBridge Scheduler, Prediction Lambda, Fallback Lambda
-│   ├── ai_engine/            # ECS Fargate service, task definition, ALB, CodeDeploy
-│   ├── audit/                # DynamoDB audit table, KMS, TTL
-│   ├── observability/        # CloudWatch alarms/log groups, Grafana datasource/dashboard hooks
-│   └── security/             # IAM roles, KMS keys, Secrets/SSM parameters
+│   ├── ai_engine/            # ECS Fargate AI runtime, internal ALB, AI API Gateway, VPC Link
+│   ├── networking/           # workload VPC, AI VPC, subnets, private outbound path, endpoints, security groups
+│   ├── observability_audit/  # DynamoDB audit, CloudWatch dashboard/alarms, Grafana workspace reference/create
+│   ├── prediction/           # EventBridge Scheduler, Prediction Lambda, Serving Adapter, Fallback Lambda
+│   ├── security_baseline/    # KMS, S3 baseline bucket, ECR, IAM roles, Secrets/SSM
+│   ├── synthetic_generator/  # ECS Fargate k6 generator
+│   ├── telemetry_ingest/     # API Gateway ingest, Lambda Ingest, SQS, DLQ
+│   └── telemetry_store/      # AMP workspace, Writer Lambda, remote-write config
 ├── environments/
 │   └── sandbox/
 │       ├── main.tf
@@ -74,7 +74,16 @@ infra/
 │       ├── outputs.tf
 │       └── versions.tf
 └── README.md
+src/
+├── fallback/
+├── generator/
+├── ingest/
+├── prediction/
+├── serving_adapter/
+└── writer/
 ```
+
+Lambda source nằm trong `src/<component>/`. Terraform package source này khi plan/apply, nên mọi chỉnh sửa Lambda phải commit ở `src/` thay vì sửa zip thủ công.
 
 Mapping component:
 
@@ -352,7 +361,7 @@ Cost cap mục tiêu là dưới $200/tháng. Deployment phải có guardrail:
 - Generator không chạy 24/7 nếu không cần; chạy theo test window.
 - Telemetry sampling mặc định 60s; không giảm xuống 10s/1s nếu không có test window time-bound.
 - Prediction interval mặc định 5 phút; không gọi AI theo từng data point.
-- Chỉ duy trì NAT Gateway ở workload VPC cho ECS k6 private outbound trong test window; AI VPC dùng VPC endpoints. Không thêm NAT Gateway mới nếu chưa review cost.
+- Chỉ duy trì private outbound path ở workload VPC cho ECS k6 trong test window; AI VPC dùng VPC endpoints. Không mở rộng egress path nếu chưa review cost.
 - Có cleanup runbook cho sandbox resources không còn dùng.
 
 Circuit breaker theo contract cho AI Engine:
@@ -371,20 +380,27 @@ Nếu forecast/actual cost đạt ngưỡng nguy hiểm:
 |---|---|---|
 | AI image/artifact bàn giao muộn | Không test real engine kịp | W11 mock same contract; W12 smoke ngay khi có image |
 | Lambda Writer remote-write AMP khó implement | Telemetry không vào primary store | POC sớm; fallback option ADOT/ECS writer nếu POC fail |
-| Private networking làm phát sinh NAT cost | Vượt budget | Chỉ thêm NAT khi bắt buộc; review VPC endpoint/cost trước apply |
+| Private networking làm phát sinh fixed egress cost | Vượt budget | Chỉ bật private outbound path khi cần test; review VPC endpoint/cost trước apply |
 | `metric_type`/schema đổi sau freeze | Prediction mapper fail | Contract test fixture + change request |
 | AI Engine 429/503 nhiều | Prediction không ổn định | Bounded retry, fallback, cap concurrency, rollback |
 | Grafana token leak | Dashboard/audit risk | Secrets Manager, log redaction, rotate token |
 | Manual deploy không tái lập | Evidence yếu | Terraform + PR + runbook bắt buộc |
 
-## 11. Open questions
+## 11. Resolved W12 deployment decisions
 
-- [ ] AI image ECR URI/tag/digest cuối cùng là gì?
-- [ ] Baseline S3 bucket/path do AI yêu cầu cụ thể thế nào?
-- [ ] CDO08 có cần triển khai ADOT/OpenTelemetry collector endpoint cho AI Engine không, hay CloudWatch/X-Ray là đủ cho capstone?
-- [ ] W12 có bắt buộc CodeDeploy canary thật không, hay ECS task definition rollback evidence đủ?
-- [ ] Grafana annotation dùng service account token hay datasource/query-only approach?
-- [ ] Lambda on-failure destination có cần riêng không, hay CloudWatch alarm đủ cho demo?
+| Topic | Decision |
+|---|---|
+| AI image URI/tag | AI image is deployed from `894597652722.dkr.ecr.us-east-1.amazonaws.com/foresight-lens-engine` with immutable Terraform-managed tag, currently `amd64-9a8dfd3-20260701` |
+| Generator image | k6 generator runs from `894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator`, immutable tag managed through `generator_image_uri`, currently `k6-phased-scenarios-20260702-1` |
+| Generator scenario phasing | Anomaly scenarios use `ANOMALY_START_SECONDS=7200` by default: 120-minute baseline warm-up, then drift/spike/leak in the same ECS task and Grafana series |
+| Baseline S3 path | `s3://cdo08-sandbox-ai-baselines-894597652722/baselines/` |
+| AI networking | API Gateway `AWS_IAM` → VPC Link → internal ALB → ECS Fargate private subnet |
+| ADOT/OTel | Not deployed in W12; CloudWatch Logs/Metrics are used for capstone evidence |
+| Rollback | ECS task definition rollback is the W12 runbook path; CodeDeploy canary remains future hardening |
+| Grafana annotation | Uses Grafana service account token stored in Secrets Manager; token value is never committed |
+| Lambda on-failure destination | CloudWatch alarms/logs are sufficient for W12 demo; no separate on-failure destination required |
+
+Remaining deployment evidence: final Terraform apply screenshot, ECS target health screenshot, smoke test output, and Grafana/DynamoDB traceability screenshot.
 
 ## Related documents
 

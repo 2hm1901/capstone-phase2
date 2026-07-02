@@ -38,9 +38,9 @@ variable "ai_engine_alb_ingress_cidrs" {
 # ---------------------------------------------------------------------------
 
 variable "generator_image_uri" {
-  description = "Full ECR URI for the synthetic generator image. Leave empty to create only ECR/cluster scaffolding."
+  description = "Full ECR URI for the synthetic generator image. Sandbox pins the current k6 image to avoid deleting the ECS task definition when applying unrelated changes."
   type        = string
-  default     = ""
+  default     = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-phased-scenarios-20260702-1"
 }
 
 variable "generator_tenant_id" {
@@ -246,4 +246,22 @@ variable "reviewer_principal_arns" {
   description = "List of IAM User/Role ARNs allowed to assume the reviewer role"
   type        = list(string)
   default     = []
+}
+
+variable "enable_email_alerts" {
+  description = "Enable SNS email alerts for Prediction/Fallback anomalies."
+  type        = bool
+  default     = true
+}
+
+variable "alert_email_subscribers" {
+  description = "Email subscribers for Prediction/Fallback SNS alerts. Each recipient must confirm the SNS subscription email."
+  type        = list(string)
+  default     = ["2hm1901dev@gmail.com"]
+}
+
+variable "email_alert_min_severity" {
+  description = "Minimum severity before Prediction/Fallback sends an email alert."
+  type        = number
+  default     = 0.5
 }

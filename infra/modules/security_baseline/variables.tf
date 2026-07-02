@@ -19,3 +19,15 @@ variable "reviewer_principal_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_email_alerts" {
+  description = "Create SNS email alert topic/subscriptions and allow Prediction/Fallback Lambdas to publish alerts."
+  type        = bool
+  default     = true
+}
+
+variable "alert_email_subscribers" {
+  description = "Email addresses subscribed to prediction/fallback SNS alerts. Recipients must confirm the SNS subscription email."
+  type        = list(string)
+  default     = ["2hm1901dev@gmail.com"]
+}

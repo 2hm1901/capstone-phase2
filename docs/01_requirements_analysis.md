@@ -2,8 +2,8 @@
 
 **Document owner:** CDO08
 
-**Status:** Draft (W11)
-**Last updated:** 2026-06-25
+**Status:** Final draft for W12 Evidence Pack #2
+**Last updated:** 2026-07-01
 
 ## 1. Đề tài context
 
@@ -21,7 +21,7 @@ CDO08 chịu trách nhiệm platform: tạo/ingest telemetry cho ba service demo
 | Telemetry retention | ≥90 ngày | Yêu cầu contract TF4; storage phải query time-series hiệu quả, raw S3 không là primary store. |
 | Lead time | ≥15 phút trước SLO breach trong cửa sổ test ≥2 giờ | Hard acceptance criterion; CDO08 phải giữ timestamp để chứng minh. |
 | Detection quality | FP ≤12%, catch ≥80% drift | AI sở hữu model metric; CDO08 tạo scenario, ground truth và artifact test. |
-| Integration latency | Target P99 platform-to-AI <1.000 ms, chờ contract xác nhận | Tránh dashboard/alert chậm; không thay thế AI SLA chính thức. |
+| Integration latency | Target P99 platform-to-AI <1,000 ms; AI API contract target <500 ms cho model serving path khi ổn định | Tránh dashboard/alert chậm; không thay thế measured latency evidence trong W12 test report. |
 | Availability | ≥99.5% demo-quality, có fail-open | Client chấp nhận demo-quality; AI down không được làm mất cảnh báo. |
 | Security | IAM least privilege, KMS encryption at rest, secret không có trong code/log | Telemetry không có PII; audit cần truy vết an toàn. |
 | Audit | Mỗi prediction call có ≥6 field và retention được ghi rõ | Hard requirement; phải liên kết request, outcome, recommendation và fallback. |
@@ -44,9 +44,17 @@ Trade-off được chấp nhận là không chạy theo các feature ngoài scop
 | Security/isolation | Service/tenant khác có đọc hoặc gửi nhầm data không? | IAM/KMS config, negative isolation test, redacted log sample |
 | Cost/operability | Có dưới budget và deploy lại được không? | Terraform plan/apply, cost model, budget/circuit-breaker evidence |
 
-## 4. Proposed platform scope
+## 4. Final platform scope
 
-CDO08 sẽ demo ba service synthetic, cần Client xác nhận cuối: `payment-api` (CPU, latency, RDS connection pressure), `queue-worker` (queue depth, consumer lag, worker CPU), và `gateway-api` (RPS, ALB active connections, latency/error rate). Generator tạo normal baseline và bốn test profiles bắt buộc: gradual drift, sudden spike, slow leak, noisy baseline. Mỗi scenario phải tái lập được và có ground truth để AI team tính confusion matrix.
+CDO08 demo ba service synthetic đã align với AI baseline và evidence hiện tại:
+
+| Service ID | Ý nghĩa demo | Metric focus |
+|---|---|---|
+| `payment-gw` | Payment gateway | CPU, memory, latency, active connections, queue depth, DB pool, cache hit rate |
+| `ledger` | Ledger service | CPU, memory, latency, queue depth, DB pool, cache hit rate |
+| `fraud-detector` | Fraud detection service | CPU, memory, latency, queue depth, DB pool, cache hit rate |
+
+Generator tạo normal baseline và bốn test profiles: `gradual_drift`, `sudden_spike`, `slow_leak`, `noisy_baseline`. Mỗi scenario có thể chạy tái lập trên ECS Fargate bằng k6. Với các anomaly scenario (`gradual_drift`, `sudden_spike`, `slow_leak`), generator mặc định chạy **120 phút baseline warm-up** trước khi bắt đầu anomaly phase (`ANOMALY_START_SECONDS=7200`). Cách này giúp Prediction Lambda có 120 phút lookback sạch và giúp Grafana hiển thị một line liền mạch cho cùng service/scenario. Với W12 evidence, best practice là chạy **3 services + 1 scenario** trong cùng một window để dashboard và annotation dễ giải thích; `all` chỉ dùng smoke/mixed test, không dùng làm số liệu precision/recall chính.
 
 Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-series storage → query window → Prediction Lambda → AI Engine Runtime do CDO08 host → prediction/recommendation → Grafana annotation và encrypted audit log. CDO08 có thể dùng mock endpoint đúng contract shape trong W11; W12 T3 phải deploy artifact AI thật lên ECS Fargate của CDO08 và gọi endpoint thật. Static threshold evaluation là nhánh độc lập chỉ hoạt động khi AI call thất bại, không thay thế model trong normal path.
 
@@ -58,12 +66,19 @@ Luồng mục tiêu là: synthetic generator → telemetry ingestion → time-se
 - **Cost:** Resource có tags, budget alert và teardown/runbook; không vượt rough cap $200/tháng.
 - **Change control:** Sau contract freeze, schema/URL/auth/SLA chỉ đổi qua quy trình curveball/đồng thuận; implementation nội bộ có thể iterate với ADR.
 
-## 6. Open questions
+## 6. Resolved decisions and remaining evidence
 
-- [ ] Ba tier-1 service và metric priority cuối cùng? — *Client, EOD T2 W11.*
-- [ ] `tenant_id` là customer/account isolation hay logical service isolation? — *Client + AI, trước contract freeze.*
-- [ ] Telemetry granularity, demo volume, late-event/order semantics? — *Telemetry Contract, EOD T4 W11.*
-- [x] AI request window, auth, timeout/retry và error mapping? — *AI API Contract v1.0: window ≥120 phút, IAM SigV4, 400/401/422/429/503 mapping.*
-- [ ] Audit retention, alert routing, evidence-link format? — *Client/AI, trước T5 W11.*
-- [ ] Static thresholds cho mỗi metric và fallback alert receiver? — *Client/AI, trước W12 integration.*
-- [ ] AWS account, VPC và existing Grafana constraints? — *Mentor/Client, trước Terraform apply.*
+| Topic | W12 decision |
+|---|---|
+| Tier-1 services | `payment-gw`, `ledger`, `fraud-detector` |
+| Logical tenant | `tenant_id` is retained as a logical tenant/account label; demo tenant is `tenant-cdo08-demo` |
+| Region/account | Shared AWS account `894597652722`, region `us-east-1` |
+| Telemetry granularity | 60 seconds default; 120-minute lookback for prediction |
+| Telemetry store | AMP, because Timestream LiveAnalytics is unavailable to the capstone account |
+| Ingest auth | API Gateway `AWS_IAM`; k6 signs requests with SigV4 |
+| AI runtime path | AI API Gateway `AWS_IAM` → VPC Link → internal ALB → ECS Fargate private subnets |
+| AI image/baseline | AI image is deployed from ECR with immutable tag; baseline files are in `s3://cdo08-sandbox-ai-baselines-894597652722/baselines/` |
+| Audit | CDO platform audit in DynamoDB with KMS/TTL; AI Engine audit logs in CloudWatch with 1-year retention per contract |
+| Dashboard | Amazon Managed Grafana workspace with AMP datasource and annotation overlay |
+
+Remaining W12 evidence to capture is tracked in [`W12_EVIDENCE_PACK.md`](W12_EVIDENCE_PACK.md) and [`07_test_eval_report.md`](07_test_eval_report.md).

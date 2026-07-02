@@ -36,6 +36,19 @@ Supported scenarios:
 - `slow_leak`
 - `noisy_baseline`
 
+The generator baselines for `cpu_usage_percent`, `memory_usage_percent`, `api_latency_ms`, and `queue_depth` are aligned to the average values from the AI team's baseline files in `external/ai-team-foresight-lens/engine-skeleton/baselines/*.json`.
+
+Scenario meaning:
+
+| Scenario | Purpose | Expected use |
+|---|---|---|
+| `noisy_baseline` | Normal traffic around baseline with small noise | Run first to prove no false-positive spam |
+| `gradual_drift` | Baseline warm-up, then slow capacity drift | Best scenario for lead-time evidence |
+| `slow_leak` | Baseline warm-up, then memory-only leak pattern | Use to test memory/OOM recommendation |
+| `sudden_spike` | Baseline warm-up, then short 5-minute spike every 30 minutes | Use for incident detection, not for 15-minute lead-time evidence |
+
+Recommended clean evaluation sequence: run exactly one anomaly scenario for 4-5 hours with the default `ANOMALY_START_SECONDS=7200`. The first 2 hours emit baseline-aligned telemetry, then the selected anomaly starts in the same ECS task and same Grafana line. Avoid overlapping scenarios when collecting AI evidence because Prediction Lambda uses a 120-minute AMP lookback window.
+
 ## Runtime config
 
 | Env var | Default | Notes |
@@ -47,6 +60,10 @@ Supported scenarios:
 | `SCENARIO_LIST` | all four scenarios | Backward-compatible Terraform env |
 | `EMIT_INTERVAL_SECONDS` | `60` | Sleep between k6 iterations |
 | `RUN_DURATION_SECONDS` | `600` | Bounded run duration; use `7200` for a 2-hour evidence window |
+| `ANOMALY_START_SECONDS` | `7200` | For anomaly scenarios, emit noisy baseline before this second, then start drift/spike/leak |
+| `BACKFILL_MODE` | `false` | When `true`, emit historical timestamps instead of waiting in real time |
+| `BACKFILL_MINUTES` | `120` | Number of past minutes to emit when `BACKFILL_MODE=true` |
+| `BACKFILL_STEP_SECONDS` | `EMIT_INTERVAL_SECONDS` | Timestamp spacing for backfill points |
 | `AWS_REGION` | `us-east-1` | SigV4 signing region |
 
 ## IAM/SigV4 auth
@@ -68,18 +85,17 @@ Run from `capstone-phase2`:
 aws ecr get-login-password --region us-east-1 \
   | docker login --username AWS --password-stdin 894597652722.dkr.ecr.us-east-1.amazonaws.com
 
-docker build -t cdo08-sandbox-generator:k6-v1 ./src/generator
-
-docker tag cdo08-sandbox-generator:k6-v1 \
-  894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1
-
-docker push 894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1
+docker buildx build \
+  --platform linux/amd64 \
+  -t 894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-phased-scenarios-20260702-1 \
+  --push \
+  ./src/generator
 ```
 
 Set `generator_image_uri` to the pushed tag before planning/applying:
 
 ```hcl
-generator_image_uri = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-v1"
+generator_image_uri = "894597652722.dkr.ecr.us-east-1.amazonaws.com/cdo08-sandbox-generator:k6-phased-scenarios-20260702-1"
 ```
 
 ## Terraform checks
@@ -105,7 +121,7 @@ docker run --rm \
   -e AWS_SESSION_TOKEN \
   -e SCENARIO=noisy_baseline \
   -e RUN_DURATION_SECONDS=60 \
-  cdo08-sandbox-generator:k6-v1
+  cdo08-sandbox-generator:k6-phased-scenarios-20260702-1
 ```
 
 ## Run ECS task
@@ -125,6 +141,34 @@ aws ecs run-task \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[<private_subnet_id>],securityGroups=[<generator_sg_id>],assignPublicIp=DISABLED}" \
   --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"SCENARIO","value":"gradual_drift"},{"name":"SERVICE_LIST","value":"payment-gw"},{"name":"RUN_DURATION_SECONDS","value":"7200"}]}]}'
+```
+
+## Backfill the last 120 minutes
+
+Use this when prediction needs a fresh 120-minute AMP window but waiting two real hours is not practical. The task sends historical `ts` values for the last 120 minutes, then exits after the bounded k6 duration.
+
+```bash
+aws ecs run-task \
+  --region us-east-1 \
+  --cluster "$(terraform -chdir=infra/environments/sandbox output -raw generator_cluster_name)" \
+  --task-definition cdo08-sandbox-generator \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$(terraform -chdir=infra/environments/sandbox output -json workload_private_subnet_ids | jq -r 'join(",")')],securityGroups=[$(terraform -chdir=infra/environments/sandbox output -raw generator_security_group_id)],assignPublicIp=DISABLED}" \
+  --overrides '{"containerOverrides":[{"name":"generator","environment":[{"name":"BACKFILL_MODE","value":"true"},{"name":"BACKFILL_MINUTES","value":"120"},{"name":"BACKFILL_STEP_SECONDS","value":"60"},{"name":"SCENARIO","value":"noisy_baseline"},{"name":"RUN_DURATION_SECONDS","value":"120"},{"name":"SERVICE_LIST","value":"payment-gw,ledger,fraud-detector"},{"name":"TENANT_ID","value":"tenant-cdo08-demo"}]}]}'
+```
+
+After it completes, verify AMP:
+
+```bash
+AMP_QUERY_ENDPOINT="$(terraform -chdir=infra/environments/sandbox output -raw amp_query_endpoint)"
+
+.venv/bin/awscurl \
+  --service aps \
+  --region us-east-1 \
+  -X POST \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'query=sum by (service_id) (count_over_time(cpu_usage_percent[120m]))' \
+  "$AMP_QUERY_ENDPOINT"
 ```
 
 ## Evidence checklist

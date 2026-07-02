@@ -76,3 +76,8 @@ output "fallback_log_group_name" {
   description = "CloudWatch log group for Fallback Lambda"
   value       = try(aws_cloudwatch_log_group.fallback_lambda_logs[0].name, null)
 }
+
+output "email_alert_topic_arn" {
+  description = "SNS topic ARN used by Prediction/Fallback email alerts."
+  value       = var.enable_prediction ? var.email_alert_topic_arn : null
+}
