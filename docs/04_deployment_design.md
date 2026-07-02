@@ -60,7 +60,7 @@ Cấu trúc Terraform thực tế W12:
 infra/
 ├── modules/
 │   ├── ai_engine/            # ECS Fargate AI runtime, internal ALB, AI API Gateway, VPC Link
-│   ├── networking/           # workload VPC, AI VPC, subnets, NAT, endpoints, security groups
+│   ├── networking/           # workload VPC, AI VPC, subnets, private outbound path, endpoints, security groups
 │   ├── observability_audit/  # DynamoDB audit, CloudWatch dashboard/alarms, Grafana workspace reference/create
 │   ├── prediction/           # EventBridge Scheduler, Prediction Lambda, Serving Adapter, Fallback Lambda
 │   ├── security_baseline/    # KMS, S3 baseline bucket, ECR, IAM roles, Secrets/SSM
@@ -361,7 +361,7 @@ Cost cap mục tiêu là dưới $200/tháng. Deployment phải có guardrail:
 - Generator không chạy 24/7 nếu không cần; chạy theo test window.
 - Telemetry sampling mặc định 60s; không giảm xuống 10s/1s nếu không có test window time-bound.
 - Prediction interval mặc định 5 phút; không gọi AI theo từng data point.
-- Chỉ duy trì NAT Gateway ở workload VPC cho ECS k6 private outbound trong test window; AI VPC dùng VPC endpoints. Không thêm NAT Gateway mới nếu chưa review cost.
+- Chỉ duy trì private outbound path ở workload VPC cho ECS k6 trong test window; AI VPC dùng VPC endpoints. Không mở rộng egress path nếu chưa review cost.
 - Có cleanup runbook cho sandbox resources không còn dùng.
 
 Circuit breaker theo contract cho AI Engine:
@@ -380,7 +380,7 @@ Nếu forecast/actual cost đạt ngưỡng nguy hiểm:
 |---|---|---|
 | AI image/artifact bàn giao muộn | Không test real engine kịp | W11 mock same contract; W12 smoke ngay khi có image |
 | Lambda Writer remote-write AMP khó implement | Telemetry không vào primary store | POC sớm; fallback option ADOT/ECS writer nếu POC fail |
-| Private networking làm phát sinh NAT cost | Vượt budget | Chỉ thêm NAT khi bắt buộc; review VPC endpoint/cost trước apply |
+| Private networking làm phát sinh fixed egress cost | Vượt budget | Chỉ bật private outbound path khi cần test; review VPC endpoint/cost trước apply |
 | `metric_type`/schema đổi sau freeze | Prediction mapper fail | Contract test fixture + change request |
 | AI Engine 429/503 nhiều | Prediction không ổn định | Bounded retry, fallback, cap concurrency, rollback |
 | Grafana token leak | Dashboard/audit risk | Secrets Manager, log redaction, rotate token |

@@ -196,7 +196,7 @@ Nội dung:
 
 - Workload VPC:
   - ECS k6 in private subnet.
-  - NAT Gateway để gọi public API Gateway ingest.
+  - Private outbound path để gọi public API Gateway ingest.
 - AI VPC:
   - ECS AI in private subnet.
   - Internal ALB.
@@ -205,7 +205,7 @@ Nội dung:
 
 Ý cần nói:
 
-- k6 cần NAT vì nó gọi API Gateway public endpoint.
+- k6 cần outbound path vì nó gọi API Gateway public endpoint.
 - AI Engine không expose ALB public; access đi qua API Gateway + IAM auth.
 - Đây là tradeoff giữa security và demo practicality.
 
@@ -276,7 +276,7 @@ Nội dung:
 
 - Major cost drivers:
   - ECS AI Engine.
-  - NAT Gateway.
+  - Private outbound path.
   - VPC Interface Endpoints.
   - ALB.
   - Managed Grafana.
@@ -336,7 +336,7 @@ So sánh:
 | --- | --- | --- |
 | Local script | Dễ chạy | Không match AWS diagram, khó share evidence |
 | Lambda | Rẻ | Không phù hợp chạy 2 giờ liên tục |
-| ECS Fargate + k6 | Chạy dài, đúng diagram, có logs/evidence | Cần NAT/image/task config |
+| ECS Fargate + k6 | Chạy dài, đúng diagram, có logs/evidence | Cần image/task/network config |
 
 Ý cần nói:
 
@@ -682,7 +682,7 @@ Nội dung:
 3. Add service-specific dashboards.
 4. Harden AI Engine private path further if needed.
 5. Add CI checks for Terraform and Lambda packaging.
-6. Improve cost controls: scheduled scale down, destroy NAT/Grafana after demo.
+6. Improve cost controls: scheduled scale down, cleanup demo-only network/Grafana resources after demo.
 
 ---
 
@@ -698,7 +698,7 @@ PM nên giữ ở tầng:
 problem -> outcome -> success criteria -> overview
 ```
 
-Không nên đi sâu vào NAT, endpoint, IAM role.
+Không nên đi sâu vào network egress, endpoint, IAM role.
 
 ### 2. TL không chỉ đọc diagram
 
@@ -706,7 +706,7 @@ TL nên giải thích decision:
 
 ```text
 Vì sao 2 VPC?
-Vì sao NAT cho k6?
+Vì sao k6 cần outbound path?
 Vì sao internal ALB cho AI?
 Vì sao API Gateway IAM/SigV4?
 Vì sao AMP + Grafana?

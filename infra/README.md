@@ -130,7 +130,7 @@ Không chạy `make tf-apply` hoặc `terraform apply` từ feature branch khi c
 
 ## Runbook W12: chạy k6 ECS và AI Engine
 
-AI Engine dùng API Gateway `AWS_IAM` làm SigV4 edge, VPC Link tới internal ALB và ECS task trong private subnet. K6 generator chạy bằng ECS Fargate trong workload private subnet; workload VPC có NAT Gateway để task pull ECR image, ghi CloudWatch Logs và gọi API Gateway ingest.
+AI Engine dùng API Gateway `AWS_IAM` làm SigV4 edge, VPC Link tới internal ALB và ECS task trong private subnet. K6 generator chạy bằng ECS Fargate trong workload private subnet; workload VPC có bounded outbound path để task pull ECR image, ghi CloudWatch Logs và gọi API Gateway ingest.
 
 Deploy base runtime và tạo k6 task definition:
 
@@ -226,7 +226,7 @@ aws sns list-subscriptions-by-topic \
   --topic-arn "$(terraform -chdir=infra/environments/sandbox output -raw email_alert_topic_arn)"
 ```
 
-NAT Gateway phát sinh hourly cost. Nếu không chạy k6 ECS dài hạn, review plan/destroy cleanup sau test window theo quyết định PM.
+Private outbound path cho workload phát sinh fixed hourly cost. Nếu không chạy k6 ECS dài hạn, review cleanup sau test window theo quyết định PM.
 
 ## Quy ước làm việc
 

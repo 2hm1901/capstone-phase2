@@ -79,7 +79,7 @@ Recommended: trước code freeze, attach các screenshot còn thiếu vào Jira
 | Area | Current note | Recommended action |
 |---|---|---|
 | Grafana dashboard | Dashboard JSON đã thêm panel `active_connections` để đủ 7 metric theo contract/generator | Re-provision Grafana dashboard and capture screenshot |
-| Cost explanation | NAT cost là driver lớn | Khi present, giải thích k6 ECS cần outbound public API Gateway/ECR/logs; AI VPC dùng endpoints/internal ALB nên không cần NAT |
+| Cost explanation | Private outbound path là driver lớn | Khi present, giải thích k6 ECS cần outbound public API Gateway/ECR/logs; AI VPC dùng endpoints/internal ALB |
 | ADR narrative | ADR đã updated tới ADR-019 | Không sửa/xóa ADR cũ; nếu có quyết định mới thì append ADR-020 |
 | README | README nên giữ high-level | Không đưa tình trạng Terraform chi tiết vào README tổng quát |
 | `infra/README.md` | Runbook đã có nhiều lệnh vận hành | Nếu update thêm, chỉ thêm lệnh thực dụng: run k6 real/backfill, provision Grafana, apply với `enable_prediction=true`, không commit token |
@@ -153,8 +153,8 @@ Save screenshots under `docs/assets/evidence/` if committing them, or keep local
 | ECS AI Engine service desired/running = 2, target group healthy | Proves AI runtime is hosted by CDO08 | `ecs_ai_engine_healthy.png` |
 | AI Target Group health = healthy on port 8080 | Proves internal ALB path works | `ai_target_group_healthy.png` |
 | API Gateway AI route with `AWS_IAM` auth / integration | Proves SigV4 edge and VPC Link | `ai_api_gateway_iam_vpc_link.png` |
-| Workload VPC NAT Gateway | Proves k6 ECS has outbound path while still in private subnet | `workload_nat_gateway.png` |
-| VPC endpoints in AI VPC | Proves AI VPC avoids NAT for AWS service access | `ai_vpc_endpoints.png` |
+| Workload VPC outbound path | Proves k6 ECS has outbound path while still in private subnet | `workload_private_outbound.png` |
+| VPC endpoints in AI VPC | Proves AI VPC uses private AWS service access | `ai_vpc_endpoints.png` |
 
 ---
 
@@ -452,12 +452,11 @@ Based on the currently deployed services, monthly cost is expected to be near th
 |---|---:|---|
 | AI ECS Fargate, 2 tasks, 0.5 vCPU/1GB | ~$35-$45 | 24/7 |
 | Internal ALB | ~$16-$30 | ALB hourly + LCU |
-| NAT Gateway workload VPC | ~$32.85 + data | Needed for private k6 ECS outbound; should be reviewed after demo |
 | VPC interface endpoints | ~$40-$45 + data | ECR/API/Logs endpoints across 2 AZs |
 | Managed Grafana | ~$9-$30 | Depends active users/workspace pricing |
 | AMP | Low for demo | Depends samples/query volume |
 | Lambda/SQS/DynamoDB/S3/KMS/Secrets/CloudWatch | Low/moderate | Watch CloudWatch logs |
-| Total rough | ~$160-$190/month | Still under `$200` only if controlled |
+| Total rough | ~$125-$155/month | Still under `$200` with guardrails |
 
 ### 10.2 Screenshot evidence to capture
 
@@ -465,7 +464,7 @@ Based on the currently deployed services, monthly cost is expected to be near th
 |---|---|---|
 | AWS Budget `cdo08-tf4-monthly-budget` | Proves cost guardrail exists | `aws_budget_cdo08.png` |
 | Cost Explorer by service | Proves measured spend, not only estimate | `cost_explorer_by_service.png` |
-| NAT Gateway hourly/cost visible | Explains major fixed cost | `nat_gateway_cost_driver.png` |
+| Workload outbound hourly/cost visible | Explains major fixed cost | `workload_outbound_cost_driver.png` |
 | Grafana workspace/users | Explains Grafana cost assumption | `grafana_workspace_users.png` |
 
 ---
@@ -595,5 +594,5 @@ Use this sequence in presentation:
    - DLQ/queue drain.
    - Fallback path.
    - Stale/cooldown dedupe to avoid alert spam.
-7. Cost: under `$200/month` only with guardrails; major drivers are AI ECS, ALB, NAT, endpoints, Grafana.
+7. Cost: under `$200/month` with guardrails; major drivers are AI ECS, ALB, endpoints, Grafana.
 8. Known gaps: broader precision/recall matrix and production hardening.

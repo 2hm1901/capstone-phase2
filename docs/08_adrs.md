@@ -303,23 +303,23 @@ ADR là log các quyết định kiến trúc có trade-off thật. File này ap
   - ⚠️ Cần IAM permission `execute-api:Invoke` đúng route cho Serving Adapter.
 - **Alternatives considered:**
   - Public ALB: dùng được cho demo nhanh nhưng không khớp final contract/security expectation.
-  - Lambda trong VPC gọi internal ALB trực tiếp: private hơn nhưng cần Lambda VPC networking, endpoints/NAT path và phức tạp hơn.
+  - Lambda trong VPC gọi internal ALB trực tiếp: private hơn nhưng cần Lambda VPC networking, endpoint/egress path và phức tạp hơn.
   - VPC peering giữa workload/AI VPC: rejected vì hai VPC không cần nói chuyện trực tiếp.
 
 ---
 
-## ADR-017 - Dùng một NAT Gateway cho workload VPC để ECS k6 chạy trong private subnet
+## ADR-017 - Bounded outbound path cho workload generator trong private subnet
 
 - **Status:** Accepted
 - **Date:** 2026-07-01
-- **Context:** Diagram yêu cầu k6 generator chạy trên AWS trong private subnet. k6 cần gọi ingest API Gateway public endpoint, pull image/ECR và ghi logs. Interface endpoint cho API Gateway public endpoint không giải quyết toàn bộ public egress pattern này.
-- **Decision:** Dùng 1 NAT Gateway ở workload VPC để ECS k6 private subnet có outbound Internet trong test window.
+- **Context:** Diagram yêu cầu k6 generator chạy trên AWS trong private subnet. k6 cần gọi ingest API Gateway public endpoint, pull image/ECR và ghi logs trong test window.
+- **Decision:** Dùng bounded outbound path ở workload VPC để ECS k6 private subnet có egress trong test window.
 - **Consequence:**
   - ✅ k6 không có public inbound/public IP.
   - ✅ Giữ đúng diagram ECS private subnet.
   - ✅ Chạy được real 2h window trên AWS, không phụ thuộc laptop.
-  - ⚠️ NAT là fixed hourly cost lớn, cần cost guardrail và cleanup review sau demo.
-  - ⚠️ Không nên tạo thêm NAT per AZ trong capstone vì vượt cost cap dễ hơn.
+  - ⚠️ Private outbound path có fixed hourly cost, cần cost guardrail và cleanup review sau demo.
+  - ⚠️ Không nên mở rộng egress path khi chưa review cost.
 - **Alternatives considered:**
   - Run k6 local: rẻ hơn nhưng không khớp diagram/evidence AWS.
   - Assign public IP cho ECS k6: đơn giản hơn nhưng yếu hơn về private workload story.

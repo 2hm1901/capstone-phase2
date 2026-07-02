@@ -14,8 +14,7 @@ CDO08 cần chứng minh platform Foresight Lens có thể chạy dưới rough 
 2. Internal ALB cho AI Engine.
 3. Amazon Managed Grafana user/workspace.
 4. CloudWatch logs/alarms.
-5. NAT Gateway của workload VPC nếu để chạy 24/7 ngoài test window.
-6. Telemetry ingestion volume nếu sampling interval quá dày.
+5. Telemetry ingestion volume nếu sampling interval quá dày.
 
 Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo `3 services × 7 metrics × 60s` thì AMP ingest/query cost dự kiến thấp. Rủi ro chỉ tăng mạnh nếu sampling giảm xuống 10s/1s hoặc volume tiến gần mức contract peak.
 
@@ -33,7 +32,6 @@ Telemetry data point là yếu tố cần kiểm soát, nhưng với scope demo 
 | AI Engine replicas | min 2, max 4 | Forecast dùng min 2 chạy 24/7 |
 | AI algorithm | Statistical time-series, không Bedrock LLM | Không có Bedrock inference cost |
 | Generator runtime | Chỉ chạy test window | Không chạy 24/7 nếu không cần |
-| NAT Gateway | 1 workload NAT trong test window | ECS k6 chạy private subnet cần outbound để pull image, ghi logs và gọi API Gateway ingest |
 
 ## 3. Telemetry volume estimate
 
@@ -115,9 +113,8 @@ Con số này thấp cho capstone. Prediction cost chủ yếu nằm ở Lambda 
 | SNS email alerts | Prediction/fallback anomaly notifications | <$1 at demo volume | Email notifications, topic requests | Keep subscribers minimal; confirm only required recipients |
 | EventBridge Scheduler | ~25,920 invokes/month | ~$0 | Free tier likely covers | 5-min cadence |
 | VPC interface endpoints | ECR API, ECR DKR, Logs across 2 AZs | ~$40–$45 + data | Endpoint hourly per AZ | Keep only endpoints required by private ECS path |
-| NAT Gateway | 1 workload NAT when ECS k6 is used | ~$32.85 + data if left 24/7 | Hourly + data processing | Keep bounded to test window; review cleanup after demo |
-| **Total forecast** | Current deployed shape, if kept 24/7 | **~$160–$190/month** | Mostly Fargate + ALB + NAT + endpoints + Grafana | Under $200 only with guardrails enforced |
-| **Cost risk case** | Extra users/log volume/NAT data or extra always-on tasks | **Can exceed $200** | Fixed hourly services | Disable generator, scale down AI, remove NAT after demo if needed |
+| **Total forecast** | Current deployed shape, if kept 24/7 | **~$125–$155/month** | Mostly Fargate + ALB + endpoints + Grafana | Under $200 with guardrails enforced |
+| **Cost risk case** | Extra users/log volume/data egress or extra always-on tasks | **Can approach/exceed $200** | Fixed hourly services | Disable generator and scale down AI after demo if needed |
 
 ## 5. Cost per demo service / tenant
 
@@ -125,8 +122,7 @@ CDO08 đang demo 3 logical services trên shared platform. Fixed cost không chi
 
 | Scenario | Monthly total | Effective cost/service/month | Note |
 |---|---:|---:|---|
-| 3 services demo, no NAT | ~$70–$135 | ~$23–$45 | Capstone baseline |
-| 3 services demo, one NAT | ~$110–$200+ | ~$37–$67+ | Risky near cap |
+| 3 services demo | ~$125–$155 | ~$42–$52 | Capstone baseline with current managed services |
 | 10 services same platform | ~$80–$150 | ~$8–$15 | Fixed cost amortized |
 | 50 services same platform | Not load-tested in W12 | Lower fixed cost/service, but AMP/cardinality/query grow | Design-level only; outside capstone implementation scope |
 
@@ -142,7 +138,6 @@ Production note: per-service cost giảm khi fixed cost như ALB, Grafana, base 
 | Self-managed Prometheus/InfluxDB | Higher ops/storage risk | Không phù hợp W11/W12 timeline |
 | AI Engine on ECS Fargate | Moderate fixed cost | Contract yêu cầu FastAPI/container; predictable runtime |
 | AI Engine on Lambda container | Potentially lower fixed cost | Chỉ cân nhắc nếu AI artifact light, startup/latency phù hợp |
-| NAT Gateway for private k6 egress | High fixed cost | Chỉ dùng 1 NAT ở workload VPC cho ECS k6; AI VPC dùng VPC endpoints |
 | Sampling 10s/1s | Increases AMP/API/Lambda volume | Không cần cho capacity trend; 60s khớp contract |
 
 ## 7. Cost guardrails
@@ -157,7 +152,6 @@ W11/W12 must-have:
 - Lambda reserved/max concurrency cho ingest/prediction.
 - SQS queue retention vừa đủ demo; DLQ có alarm.
 - CloudWatch app log retention 14–30 ngày; AI audit log retention 1 năm theo contract.
-- Không tạo thêm NAT Gateway; workload NAT chỉ phục vụ ECS k6 trong test window và cần review cleanup sau demo.
 - Scale-to-zero/circuit breaker cho ECS AI Engine nếu cost vượt ngưỡng nguy hiểm theo Deployment Contract.
 
 Circuit breaker action:
@@ -202,8 +196,7 @@ Budget >= 100% cap
 | Grafana | ~$9–$30 | Capture Grafana workspace/users | Depends active users |
 | KMS/Secrets/SSM/S3/ECR | ~$1–$8 | Capture Cost Explorer grouped services | Includes baseline bucket, secrets, ECR images |
 | VPC endpoints | ~$40–$45 + data | Capture VPC endpoint count | 3 endpoint services × 2 AZ |
-| NAT Gateway | ~$32.85 + data if 24/7 | Capture NAT Gateway hours/data | Workload VPC only, review cleanup |
-| **Total** | **~$160–$190** | Capture Cost Explorer total | Should stay below `$200` with guardrails |
+| **Total** | **~$125–$155** | Capture Cost Explorer total | Should stay below `$200` with guardrails |
 
 ### 8.3 Cost per useful prediction - W12 calculation
 
@@ -223,12 +216,11 @@ Budget >= 100% cap
 |---|---|
 | Region/account pricing | `us-east-1` on shared sandbox AWS account |
 | AI Engine desired count | Keep min 2 for contract/demo availability while testing; scale down only after demo/evidence if cost guardrail triggers |
-| NAT Gateway | AI VPC does not use NAT; workload VPC has 1 NAT so private ECS k6 can call public API Gateway and AWS public endpoints |
 | Grafana | Managed Grafana is kept for W12 because annotation overlay is a core requirement |
 | AMP usage metrics | Capture if exposed; otherwise use request/sample model + Grafana evidence |
 | 50k events/sec peak | Design-level capacity only; W12 implementation validates demo scope, not full production peak |
 
-Remaining evidence: Cost Explorer by service, AWS Budget screenshot, and NAT/Grafana cost explanation screenshots.
+Remaining evidence: Cost Explorer by service, AWS Budget screenshot, and Grafana cost explanation screenshots.
 
 ## Related documents
 
